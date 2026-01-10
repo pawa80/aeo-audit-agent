@@ -24,7 +24,12 @@ class AnalysisResult:
     direct_answer_score: int  # 0-100 score
     direct_answer_reasons: list[str]
     extraction_success: bool
+    generated_queries: list[str] = None
     error_message: Optional[str] = None
+
+    def __post_init__(self):
+        if self.generated_queries is None:
+            self.generated_queries = []
 
 
 def fetch_page_content(url: str, timeout: int = 10) -> tuple[str, Optional[str]]:
@@ -179,6 +184,76 @@ def check_direct_answer(first_paragraph: str) -> tuple[bool, int, list[str]]:
     return is_direct_answer, min(score, 100), reasons
 
 
+def generate_queries(title: str, first_paragraph: str) -> list[str]:
+    """
+    Generate 3 realistic search queries that this content should answer.
+
+    Uses the page title and first paragraph to create queries someone
+    might actually search for.
+
+    Returns:
+        List of 3 query strings
+    """
+    queries = []
+
+    # Clean up title - remove site name suffixes like "| Site Name" or "- Site Name"
+    clean_title = re.split(r'\s*[|\-–—]\s*', title)[0].strip()
+
+    if not clean_title and not first_paragraph:
+        return ["What is this topic?", "How does this work?", "Why is this important?"]
+
+    # Query 1: Direct "what is" question from title
+    # Extract key topic from title
+    title_lower = clean_title.lower()
+
+    # Remove common prefixes
+    for prefix in ["how to ", "guide to ", "the complete ", "the ultimate ",
+                   "a guide to ", "understanding ", "learn about "]:
+        if title_lower.startswith(prefix):
+            title_lower = title_lower[len(prefix):]
+            break
+
+    if title_lower:
+        # Create a "what is" query
+        queries.append(f"What is {title_lower}?")
+
+    # Query 2: "How" question - either from title or inferred
+    if "how to" in title.lower():
+        queries.append(clean_title + "?")
+    elif first_paragraph:
+        # Extract a likely topic and create a how question
+        words = first_paragraph.split()[:10]
+        topic_hint = " ".join(words[:5])
+        # Look for action verbs or nouns
+        if any(word in first_paragraph.lower() for word in
+               ["process", "method", "step", "way", "approach"]):
+            queries.append(f"How does {title_lower} work?")
+        else:
+            queries.append(f"How to use {title_lower}?")
+    else:
+        queries.append(f"How does {title_lower} work?")
+
+    # Query 3: "Why" or comparison question
+    if first_paragraph:
+        # Check for benefit/importance language
+        if any(word in first_paragraph.lower() for word in
+               ["important", "benefit", "advantage", "help", "improve"]):
+            queries.append(f"Why is {title_lower} important?")
+        elif any(word in first_paragraph.lower() for word in
+                 ["best", "top", "compare", "vs", "versus", "difference"]):
+            queries.append(f"What is the best {title_lower}?")
+        else:
+            queries.append(f"Why use {title_lower}?")
+    else:
+        queries.append(f"Why is {title_lower} important?")
+
+    # Ensure we have exactly 3 queries
+    while len(queries) < 3:
+        queries.append(f"What are the benefits of {title_lower}?")
+
+    return queries[:3]
+
+
 def analyze_url(url: str) -> AnalysisResult:
     """
     Main analysis function - fetches and analyzes a URL.
@@ -218,6 +293,9 @@ def analyze_url(url: str) -> AnalysisResult:
     # Check for direct answer
     has_answer, answer_score, answer_reasons = check_direct_answer(first_paragraph)
 
+    # Generate search queries
+    queries = generate_queries(title, first_paragraph)
+
     return AnalysisResult(
         url=url,
         title=title,
@@ -227,5 +305,6 @@ def analyze_url(url: str) -> AnalysisResult:
         has_direct_answer=has_answer,
         direct_answer_score=answer_score,
         direct_answer_reasons=answer_reasons,
-        extraction_success=True
+        extraction_success=True,
+        generated_queries=queries
     )
