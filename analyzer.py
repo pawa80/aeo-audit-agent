@@ -25,6 +25,7 @@ class AnalysisResult:
     direct_answer_reasons: list[str]
     extraction_success: bool
     generated_queries: list[str] = None
+    queries_ai_generated: bool = False
     error_message: Optional[str] = None
 
     def __post_init__(self):
@@ -184,12 +185,11 @@ def check_direct_answer(first_paragraph: str) -> tuple[bool, int, list[str]]:
     return is_direct_answer, min(score, 100), reasons
 
 
-def generate_queries(title: str, first_paragraph: str) -> list[str]:
+def generate_queries_rule_based(title: str, first_paragraph: str) -> list[str]:
     """
-    Generate 3 realistic search queries that this content should answer.
+    Generate 3 realistic search queries using rule-based approach.
 
-    Uses the page title and first paragraph to create queries someone
-    might actually search for.
+    This is the fallback when OpenAI API is unavailable.
 
     Returns:
         List of 3 query strings
@@ -254,7 +254,47 @@ def generate_queries(title: str, first_paragraph: str) -> list[str]:
     return queries[:3]
 
 
-def analyze_url(url: str) -> AnalysisResult:
+def smart_generate_queries(
+    title: str,
+    first_paragraph: str,
+    first_500_words: str,
+    openai_api_key: Optional[str] = None
+) -> tuple[list[str], bool]:
+    """
+    Generate queries using LLM if available, otherwise fall back to rules.
+
+    Args:
+        title: Page title
+        first_paragraph: First paragraph of content
+        first_500_words: First 500 words of content
+        openai_api_key: Optional OpenAI API key
+
+    Returns:
+        Tuple of (queries, is_ai_generated)
+    """
+    if openai_api_key:
+        try:
+            from query_generator import generate_queries_with_llm
+
+            result = generate_queries_with_llm(
+                title=title,
+                first_paragraph=first_paragraph,
+                first_500_words=first_500_words,
+                api_key=openai_api_key
+            )
+
+            if result.is_ai_generated and len(result.queries) >= 3:
+                return result.queries[:3], True
+
+        except Exception:
+            pass  # Fall through to rule-based
+
+    # Fallback to rule-based
+    queries = generate_queries_rule_based(title, first_paragraph)
+    return queries, False
+
+
+def analyze_url(url: str, openai_api_key: Optional[str] = None) -> AnalysisResult:
     """
     Main analysis function - fetches and analyzes a URL.
 
@@ -293,8 +333,13 @@ def analyze_url(url: str) -> AnalysisResult:
     # Check for direct answer
     has_answer, answer_score, answer_reasons = check_direct_answer(first_paragraph)
 
-    # Generate search queries
-    queries = generate_queries(title, first_paragraph)
+    # Generate search queries (LLM if available, otherwise rule-based)
+    queries, ai_generated = smart_generate_queries(
+        title=title,
+        first_paragraph=first_paragraph,
+        first_500_words=first_500,
+        openai_api_key=openai_api_key
+    )
 
     return AnalysisResult(
         url=url,
@@ -306,5 +351,6 @@ def analyze_url(url: str) -> AnalysisResult:
         direct_answer_score=answer_score,
         direct_answer_reasons=answer_reasons,
         extraction_success=True,
-        generated_queries=queries
+        generated_queries=queries,
+        queries_ai_generated=ai_generated
     )

@@ -156,13 +156,22 @@ def main():
     with col1:
         analyze_button = st.button("Analyze", type="primary", use_container_width=True)
 
+    # Get OpenAI API key if available
+    openai_api_key = None
+    try:
+        openai_api_key = st.secrets.get("OPENAI_API_KEY", "")
+        if not openai_api_key:
+            openai_api_key = None
+    except Exception:
+        openai_api_key = None
+
     # Analysis
     if analyze_button:
         if not url:
             st.warning("Please enter a URL to analyze.")
         else:
             with st.spinner("Analyzing page content..."):
-                result = analyze_url(url)
+                result = analyze_url(url, openai_api_key=openai_api_key)
                 st.session_state.analysis_result = result
                 st.session_state.citation_results = None  # Reset citations on new analysis
 
@@ -180,8 +189,11 @@ def main():
             These queries are generated based on your page's title and content.
             """)
 
-            # Display generated queries
-            st.markdown("**Generated Queries:**")
+            # Display generated queries with source indicator
+            if result.queries_ai_generated:
+                st.markdown("**Generated Queries:** *(AI-generated using GPT-4o-mini)*")
+            else:
+                st.markdown("**Generated Queries:** *(rule-based fallback)*")
             for i, query in enumerate(result.generated_queries, 1):
                 st.markdown(f"{i}. {query}")
 
