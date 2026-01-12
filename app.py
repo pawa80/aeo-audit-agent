@@ -7,6 +7,7 @@ A tool to analyze web pages for Answer Engine Optimization.
 import streamlit as st
 from analyzer import analyze_url, AnalysisResult
 from perplexity_checker import check_all_queries, get_citation_summary, CitationResult
+from recommender import generate_recommendations
 
 
 def display_score_gauge(score: int) -> None:
@@ -136,6 +137,8 @@ def main():
         st.session_state.analysis_result = None
     if "citation_results" not in st.session_state:
         st.session_state.citation_results = None
+    if "recommendations" not in st.session_state:
+        st.session_state.recommendations = None
 
     st.title("AEO Audit Agent")
     st.markdown("*Analyze your content for Answer Engine Optimization*")
@@ -165,6 +168,7 @@ def main():
                 result = analyze_url(url)
                 st.session_state.analysis_result = result
                 st.session_state.citation_results = None  # Reset citations on new analysis
+                st.session_state.recommendations = None  # Reset recommendations on new analysis
 
     # Display analysis results if available
     if st.session_state.analysis_result:
@@ -226,6 +230,57 @@ def main():
                 st.subheader("Citation Results")
                 summary = get_citation_summary(st.session_state.citation_results)
                 display_citation_results(st.session_state.citation_results, summary)
+
+                # Recommendations Section (only after citation check)
+                st.markdown("---")
+                st.subheader("Recommendations")
+                st.markdown("Get AI-powered suggestions to improve your page's chances of being cited.")
+
+                # Check if OpenAI API key is available
+                openai_key_available = False
+                try:
+                    openai_key = st.secrets.get("OPENAI_API_KEY", "")
+                    openai_key_available = bool(openai_key)
+                except Exception:
+                    openai_key_available = False
+
+                if not openai_key_available:
+                    st.info(
+                        "To get recommendations, add your OpenAI API key to "
+                        "`.streamlit/secrets.toml`:\n\n"
+                        "```\nOPENAI_API_KEY = \"sk-...\"\n```"
+                    )
+
+                col1, col2 = st.columns([1, 4])
+                with col1:
+                    recommend_button = st.button(
+                        "Get Recommendations",
+                        type="secondary",
+                        use_container_width=True,
+                        disabled=not openai_key_available
+                    )
+
+                if recommend_button and openai_key_available:
+                    with st.spinner("Generating recommendations..."):
+                        openai_key = st.secrets["OPENAI_API_KEY"]
+                        rec_result = generate_recommendations(
+                            title=result.title,
+                            first_paragraph=result.first_paragraph,
+                            first_500_words=result.first_500_words,
+                            direct_answer_score=result.direct_answer_score,
+                            citation_results=st.session_state.citation_results,
+                            api_key=openai_key
+                        )
+                        st.session_state.recommendations = rec_result
+
+                # Display recommendations if available
+                if st.session_state.recommendations:
+                    rec_result = st.session_state.recommendations
+                    if rec_result.success and rec_result.recommendations:
+                        for i, rec in enumerate(rec_result.recommendations, 1):
+                            st.info(f"**{i}.** {rec}")
+                    elif rec_result.error:
+                        st.error(f"Failed to generate recommendations: {rec_result.error}")
 
     # Footer
     st.markdown("---")
