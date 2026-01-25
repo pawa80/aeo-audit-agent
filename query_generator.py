@@ -135,6 +135,133 @@ Content excerpt: {first_500_words[:1000]}"""
         )
 
 
+def generate_queries_from_intents(
+    title: str,
+    first_paragraph: str,
+    selected_intents: list[str],
+    api_key: str,
+    model: str = "gpt-4o-mini",
+    max_tokens: int = 100,
+    temperature: float = 0.7
+) -> QueryGenerationResult:
+    """
+    Generate search queries based on user-selected intents.
+
+    Args:
+        title: Page title
+        first_paragraph: First paragraph of content
+        selected_intents: List of 3-6 user-confirmed intents
+        api_key: OpenAI API key
+        model: Model to use (default: gpt-4o-mini)
+        max_tokens: Maximum tokens in response
+        temperature: Sampling temperature
+
+    Returns:
+        QueryGenerationResult with queries and metadata
+    """
+    if not api_key:
+        return QueryGenerationResult(
+            queries=[],
+            is_ai_generated=False,
+            error="OpenAI API key required"
+        )
+
+    endpoint = "https://api.openai.com/v1/chat/completions"
+
+    # Format intents for prompt
+    intents_text = "\n".join(f"- {intent}" for intent in selected_intents)
+
+    prompt = f"""Generate 3 realistic search queries that someone might type into an AI search engine.
+
+The user has confirmed these intents for the page:
+{intents_text}
+
+The page title is: {title}
+The first paragraph is: {first_paragraph}
+
+Generate queries that align with the confirmed intents. Return only the queries, one per line, no numbering or explanation."""
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": max_tokens,
+        "temperature": temperature
+    }
+
+    try:
+        response = requests.post(
+            endpoint,
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+        response.raise_for_status()
+        data = response.json()
+
+    except requests.exceptions.Timeout:
+        return QueryGenerationResult(
+            queries=[],
+            is_ai_generated=False,
+            error="Request timed out"
+        )
+    except requests.exceptions.HTTPError as e:
+        error_msg = f"API error: {e.response.status_code}"
+        if e.response.status_code == 401:
+            error_msg = "Invalid API key"
+        elif e.response.status_code == 429:
+            error_msg = "Rate limit exceeded"
+        return QueryGenerationResult(
+            queries=[],
+            is_ai_generated=False,
+            error=error_msg
+        )
+    except requests.exceptions.RequestException as e:
+        return QueryGenerationResult(
+            queries=[],
+            is_ai_generated=False,
+            error=f"Request failed: {str(e)}"
+        )
+
+    # Parse response
+    try:
+        content = data["choices"][0]["message"]["content"].strip()
+        # Split by newlines and clean up
+        queries = [q.strip() for q in content.split("\n") if q.strip()]
+        # Remove any numbering (1., 2., etc.) or bullet points
+        cleaned_queries = []
+        for q in queries:
+            # Remove common prefixes like "1.", "1)", "-", "*", etc.
+            cleaned = q.lstrip("0123456789.-)*• ").strip()
+            if cleaned:
+                cleaned_queries.append(cleaned)
+
+        if len(cleaned_queries) >= 3:
+            return QueryGenerationResult(
+                queries=cleaned_queries[:3],
+                is_ai_generated=True
+            )
+        else:
+            return QueryGenerationResult(
+                queries=[],
+                is_ai_generated=False,
+                error="LLM returned fewer than 3 queries"
+            )
+
+    except (KeyError, IndexError) as e:
+        return QueryGenerationResult(
+            queries=[],
+            is_ai_generated=False,
+            error=f"Failed to parse response: {str(e)}"
+        )
+
+
 def get_fallback_queries(title: str, first_paragraph: str) -> list[str]:
     """
     Generate fallback queries using simple rules.

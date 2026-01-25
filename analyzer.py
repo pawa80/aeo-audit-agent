@@ -24,6 +24,7 @@ class AnalysisResult:
     direct_answer_score: int  # 0-100 score
     direct_answer_reasons: list[str]
     extraction_success: bool
+    headings: list[dict] = None  # List of {"level": "h1/h2/h3", "text": "..."}
     generated_queries: list[str] = None
     queries_ai_generated: bool = False
     error_message: Optional[str] = None
@@ -31,6 +32,8 @@ class AnalysisResult:
     def __post_init__(self):
         if self.generated_queries is None:
             self.generated_queries = []
+        if self.headings is None:
+            self.headings = []
 
 
 def fetch_page_content(url: str, timeout: int = 10) -> tuple[str, Optional[str]]:
@@ -58,12 +61,12 @@ def fetch_page_content(url: str, timeout: int = 10) -> tuple[str, Optional[str]]
         return "", f"Error fetching page: {str(e)}"
 
 
-def extract_text_content(html: str) -> tuple[str, str, list[str]]:
+def extract_text_content(html: str) -> tuple[str, str, list[str], list[dict]]:
     """
     Extract readable text content from HTML.
 
     Returns:
-        Tuple of (full_text, title, paragraphs)
+        Tuple of (full_text, title, paragraphs, headings)
     """
     soup = BeautifulSoup(html, "lxml")
 
@@ -87,6 +90,13 @@ def extract_text_content(html: str) -> tuple[str, str, list[str]]:
         soup
     )
 
+    # Extract headings (H1, H2, H3)
+    headings = []
+    for heading in main_content.find_all(["h1", "h2", "h3"]):
+        text = heading.get_text(strip=True)
+        if text:
+            headings.append({"level": heading.name, "text": text})
+
     # Extract paragraphs
     paragraphs = []
     for p in main_content.find_all(["p", "h1", "h2", "h3", "li"]):
@@ -99,7 +109,7 @@ def extract_text_content(html: str) -> tuple[str, str, list[str]]:
     # Clean up whitespace
     full_text = re.sub(r"\s+", " ", full_text)
 
-    return full_text, title, paragraphs
+    return full_text, title, paragraphs, headings
 
 
 def count_words(text: str) -> int:
@@ -319,11 +329,12 @@ def analyze_url(url: str, openai_api_key: Optional[str] = None) -> AnalysisResul
             direct_answer_score=0,
             direct_answer_reasons=[],
             extraction_success=False,
+            headings=[],
             error_message=error
         )
 
     # Extract text
-    full_text, title, paragraphs = extract_text_content(html)
+    full_text, title, paragraphs, headings = extract_text_content(html)
 
     # Get metrics
     total_words = count_words(full_text)
@@ -351,6 +362,7 @@ def analyze_url(url: str, openai_api_key: Optional[str] = None) -> AnalysisResul
         direct_answer_score=answer_score,
         direct_answer_reasons=answer_reasons,
         extraction_success=True,
+        headings=headings,
         generated_queries=queries,
         queries_ai_generated=ai_generated
     )

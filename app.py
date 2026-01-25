@@ -8,6 +8,8 @@ import streamlit as st
 from analyzer import analyze_url, AnalysisResult
 from perplexity_checker import check_all_queries, get_citation_summary, CitationResult
 from recommender import generate_recommendations
+from intent_extractor import extract_intents
+from query_generator import generate_queries_from_intents
 
 
 def display_score_gauge(score: int) -> None:
@@ -139,6 +141,15 @@ def main():
         st.session_state.citation_results = None
     if "recommendations" not in st.session_state:
         st.session_state.recommendations = None
+    # New session state for intent validation
+    if "extracted_intents" not in st.session_state:
+        st.session_state.extracted_intents = []
+    if "selected_intents" not in st.session_state:
+        st.session_state.selected_intents = []
+    if "intent_validated" not in st.session_state:
+        st.session_state.intent_validated = False
+    if "regenerated_queries" not in st.session_state:
+        st.session_state.regenerated_queries = []
 
     st.title("AEO Audit Agent")
     st.markdown("*Analyze your content for Answer Engine Optimization*")
@@ -176,129 +187,251 @@ def main():
             with st.spinner("Analyzing page content..."):
                 result = analyze_url(url, openai_api_key=openai_api_key)
                 st.session_state.analysis_result = result
-                st.session_state.citation_results = None  # Reset citations on new analysis
-                st.session_state.recommendations = None  # Reset recommendations on new analysis
+                # Reset all downstream state on new analysis
+                st.session_state.citation_results = None
+                st.session_state.recommendations = None
+                st.session_state.extracted_intents = []
+                st.session_state.selected_intents = []
+                st.session_state.intent_validated = False
+                st.session_state.regenerated_queries = []
+
+                # Extract intents if we have an API key and analysis succeeded
+                if result.extraction_success and openai_api_key:
+                    with st.spinner("Extracting user intents..."):
+                        intent_result = extract_intents(
+                            title=result.title,
+                            first_paragraph=result.first_paragraph,
+                            first_500_words=result.first_500_words,
+                            headings=result.headings or [],
+                            api_key=openai_api_key
+                        )
+                        if intent_result.success:
+                            st.session_state.extracted_intents = intent_result.intents
 
     # Display analysis results if available
     if st.session_state.analysis_result:
         result = st.session_state.analysis_result
         display_results(result)
 
-        # Citation Check Section
-        if result.extraction_success and result.generated_queries:
+        # Intent Validation Section (only if intents were extracted)
+        if result.extraction_success and st.session_state.extracted_intents:
             st.markdown("---")
-            st.subheader("Citation Check")
+            st.subheader("Validate User Intents")
             st.markdown("""
-            Test if Perplexity AI cites your page when answering these queries.
-            These queries are generated based on your page's title and content.
+            These are the phrases we detected that your page could be optimized for.
+            **Select 3-6 intents** that best match what you want your page to rank for.
             """)
 
-            # Display generated queries with source indicator
-            if result.queries_ai_generated:
-                st.markdown("**Generated Queries:** *(AI-generated using GPT-4o-mini)*")
+            # Select All / Select None buttons
+            col1, col2, col3 = st.columns([1, 1, 4])
+            with col1:
+                if st.button("Select All", use_container_width=True):
+                    st.session_state.selected_intents = st.session_state.extracted_intents.copy()
+                    st.rerun()
+            with col2:
+                if st.button("Select None", use_container_width=True):
+                    st.session_state.selected_intents = []
+                    st.rerun()
+
+            # Display checkboxes for each intent
+            selected = []
+            for i, intent in enumerate(st.session_state.extracted_intents):
+                # Check if this intent is currently selected
+                is_selected = intent in st.session_state.selected_intents
+                if st.checkbox(intent, value=is_selected, key=f"intent_{i}"):
+                    selected.append(intent)
+
+            # Update selected intents
+            st.session_state.selected_intents = selected
+
+            # Show selection count and validation
+            num_selected = len(st.session_state.selected_intents)
+            if num_selected < 3:
+                st.warning(f"Please select at least 3 intents. Currently selected: {num_selected}")
+            elif num_selected > 6:
+                st.warning(f"Please select at most 6 intents. Currently selected: {num_selected}")
             else:
-                st.markdown("**Generated Queries:** *(rule-based fallback)*")
-            for i, query in enumerate(result.generated_queries, 1):
-                st.markdown(f"{i}. {query}")
+                st.success(f"Selected {num_selected} intents - ready to confirm!")
 
-            # Check if API key is configured
-            api_key_available = False
-            try:
-                api_key = st.secrets.get("PERPLEXITY_API_KEY", "")
-                api_key_available = bool(api_key)
-            except Exception:
-                api_key_available = False
-
-            if not api_key_available:
-                st.info(
-                    "To check citations, add your Perplexity API key to "
-                    "`.streamlit/secrets.toml`:\n\n"
-                    "```\nPERPLEXITY_API_KEY = \"your-api-key-here\"\n```"
-                )
-
-            # Citation check button
+            # Confirm Intents button
             col1, col2 = st.columns([1, 4])
             with col1:
-                check_button = st.button(
-                    "Check Citations",
-                    type="secondary",
+                confirm_button = st.button(
+                    "Confirm Intents",
+                    type="primary",
                     use_container_width=True,
-                    disabled=not api_key_available
+                    disabled=num_selected < 3 or num_selected > 6
                 )
 
-            if check_button and api_key_available:
-                with st.spinner("Checking citations with Perplexity AI..."):
-                    api_key = st.secrets["PERPLEXITY_API_KEY"]
-                    citation_results = check_all_queries(
-                        result.generated_queries,
-                        result.url,
-                        api_key
+            if confirm_button and 3 <= num_selected <= 6:
+                # Regenerate queries based on selected intents
+                with st.spinner("Generating queries based on your selected intents..."):
+                    query_result = generate_queries_from_intents(
+                        title=result.title,
+                        first_paragraph=result.first_paragraph,
+                        selected_intents=st.session_state.selected_intents,
+                        api_key=openai_api_key
                     )
-                    st.session_state.citation_results = citation_results
+                    if query_result.is_ai_generated and query_result.queries:
+                        st.session_state.regenerated_queries = query_result.queries
+                        st.session_state.intent_validated = True
+                    else:
+                        # Fallback to original queries if regeneration fails
+                        st.session_state.regenerated_queries = result.generated_queries
+                        st.session_state.intent_validated = True
+                        if query_result.error:
+                            st.warning(f"Query regeneration failed: {query_result.error}. Using original queries.")
+                st.rerun()
 
-            # Display citation results if available
-            if st.session_state.citation_results:
+        # Show message if no intents extracted (no API key)
+        elif result.extraction_success and not st.session_state.extracted_intents and not st.session_state.intent_validated:
+            st.markdown("---")
+            st.subheader("Validate User Intents")
+            if not openai_api_key:
+                st.info(
+                    "To extract and validate user intents, add your OpenAI API key to "
+                    "`.streamlit/secrets.toml`:\n\n"
+                    "```\nOPENAI_API_KEY = \"sk-...\"\n```"
+                )
+            else:
+                st.info("No intents could be extracted from this page.")
+
+            # Allow skipping intent validation
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                if st.button("Skip Intent Validation", use_container_width=True):
+                    st.session_state.intent_validated = True
+                    st.session_state.regenerated_queries = result.generated_queries
+                    st.rerun()
+
+        # Citation Check Section (only after intent validation)
+        if result.extraction_success and st.session_state.intent_validated:
+            # Use regenerated queries if available, otherwise use original
+            queries_to_use = st.session_state.regenerated_queries or result.generated_queries
+
+            if queries_to_use:
                 st.markdown("---")
-                st.subheader("Citation Results")
-                summary = get_citation_summary(st.session_state.citation_results)
-                display_citation_results(st.session_state.citation_results, summary)
+                st.subheader("Citation Check")
+                st.markdown("""
+                Test if Perplexity AI cites your page when answering these queries.
+                """)
 
-                # Recommendations Section (only after citation check)
-                st.markdown("---")
-                st.subheader("Recommendations")
-                st.markdown("Get AI-powered suggestions to improve your page's chances of being cited.")
+                # Show selected intents if any
+                if st.session_state.selected_intents:
+                    with st.expander("Selected intents", expanded=False):
+                        for intent in st.session_state.selected_intents:
+                            st.markdown(f"- {intent}")
 
-                # Check if OpenAI API key is available
-                openai_key_available = False
+                # Display generated queries
+                if st.session_state.regenerated_queries and st.session_state.selected_intents:
+                    st.markdown("**Generated Queries:** *(based on your selected intents)*")
+                elif result.queries_ai_generated:
+                    st.markdown("**Generated Queries:** *(AI-generated using GPT-4o-mini)*")
+                else:
+                    st.markdown("**Generated Queries:** *(rule-based fallback)*")
+
+                for i, query in enumerate(queries_to_use, 1):
+                    st.markdown(f"{i}. {query}")
+
+                # Check if API key is configured
+                api_key_available = False
                 try:
-                    openai_key = st.secrets.get("OPENAI_API_KEY", "")
-                    openai_key_available = bool(openai_key)
+                    api_key = st.secrets.get("PERPLEXITY_API_KEY", "")
+                    api_key_available = bool(api_key)
                 except Exception:
-                    openai_key_available = False
+                    api_key_available = False
 
-                if not openai_key_available:
+                if not api_key_available:
                     st.info(
-                        "To get recommendations, add your OpenAI API key to "
+                        "To check citations, add your Perplexity API key to "
                         "`.streamlit/secrets.toml`:\n\n"
-                        "```\nOPENAI_API_KEY = \"sk-...\"\n```"
+                        "```\nPERPLEXITY_API_KEY = \"your-api-key-here\"\n```"
                     )
 
+                # Citation check button
                 col1, col2 = st.columns([1, 4])
                 with col1:
-                    recommend_button = st.button(
-                        "Get Recommendations",
+                    check_button = st.button(
+                        "Check Citations",
                         type="secondary",
                         use_container_width=True,
-                        disabled=not openai_key_available
+                        disabled=not api_key_available
                     )
 
-                if recommend_button and openai_key_available:
-                    with st.spinner("Generating recommendations..."):
-                        openai_key = st.secrets["OPENAI_API_KEY"]
-                        rec_result = generate_recommendations(
-                            title=result.title,
-                            first_paragraph=result.first_paragraph,
-                            first_500_words=result.first_500_words,
-                            direct_answer_score=result.direct_answer_score,
-                            citation_results=st.session_state.citation_results,
-                            api_key=openai_key
+                if check_button and api_key_available:
+                    with st.spinner("Checking citations with Perplexity AI..."):
+                        api_key = st.secrets["PERPLEXITY_API_KEY"]
+                        citation_results = check_all_queries(
+                            queries_to_use,
+                            result.url,
+                            api_key
                         )
-                        st.session_state.recommendations = rec_result
+                        st.session_state.citation_results = citation_results
 
-                # Display recommendations if available
-                if st.session_state.recommendations:
-                    rec_result = st.session_state.recommendations
-                    if rec_result.success and rec_result.recommendations:
-                        for i, rec in enumerate(rec_result.recommendations, 1):
-                            st.info(f"**{i}.** {rec}")
-                    elif rec_result.error:
-                        st.error(f"Failed to generate recommendations: {rec_result.error}")
+                # Display citation results if available
+                if st.session_state.citation_results:
+                    st.markdown("---")
+                    st.subheader("Citation Results")
+                    summary = get_citation_summary(st.session_state.citation_results)
+                    display_citation_results(st.session_state.citation_results, summary)
+
+                    # Recommendations Section (only after citation check)
+                    st.markdown("---")
+                    st.subheader("Recommendations")
+                    st.markdown("Get AI-powered suggestions to improve your page's chances of being cited.")
+
+                    # Check if OpenAI API key is available
+                    openai_key_available = False
+                    try:
+                        openai_key = st.secrets.get("OPENAI_API_KEY", "")
+                        openai_key_available = bool(openai_key)
+                    except Exception:
+                        openai_key_available = False
+
+                    if not openai_key_available:
+                        st.info(
+                            "To get recommendations, add your OpenAI API key to "
+                            "`.streamlit/secrets.toml`:\n\n"
+                            "```\nOPENAI_API_KEY = \"sk-...\"\n```"
+                        )
+
+                    col1, col2 = st.columns([1, 4])
+                    with col1:
+                        recommend_button = st.button(
+                            "Get Recommendations",
+                            type="secondary",
+                            use_container_width=True,
+                            disabled=not openai_key_available
+                        )
+
+                    if recommend_button and openai_key_available:
+                        with st.spinner("Generating recommendations..."):
+                            openai_key = st.secrets["OPENAI_API_KEY"]
+                            rec_result = generate_recommendations(
+                                title=result.title,
+                                first_paragraph=result.first_paragraph,
+                                first_500_words=result.first_500_words,
+                                direct_answer_score=result.direct_answer_score,
+                                headings=result.headings,
+                                citation_results=st.session_state.citation_results,
+                                api_key=openai_key
+                            )
+                            st.session_state.recommendations = rec_result
+
+                    # Display recommendations if available
+                    if st.session_state.recommendations:
+                        rec_result = st.session_state.recommendations
+                        if rec_result.success and rec_result.recommendations:
+                            for i, rec in enumerate(rec_result.recommendations, 1):
+                                st.info(f"**{i}.** {rec}")
+                        elif rec_result.error:
+                            st.error(f"Failed to generate recommendations: {rec_result.error}")
 
     # Footer
     st.markdown("---")
     st.markdown(
         "<div style='text-align: center; color: gray; font-size: 12px;'>"
-        "AEO Audit Agent v0.2 - MVP"
+        "AEO Audit Agent v0.3 - Intent Validation"
         "</div>",
         unsafe_allow_html=True
     )
