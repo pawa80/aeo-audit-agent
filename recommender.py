@@ -24,6 +24,7 @@ def generate_recommendations(
     first_paragraph: str,
     first_500_words: str,
     direct_answer_score: int,
+    headings: Optional[list[dict]] = None,
     citation_results: Optional[list] = None,
     api_key: str = "",
     model: str = "gpt-4o-mini",
@@ -38,6 +39,7 @@ def generate_recommendations(
         first_paragraph: First paragraph of content
         first_500_words: First 500 words of content
         direct_answer_score: Score from direct answer analysis (0-100)
+        headings: Optional list of heading dicts with 'level' and 'text' keys
         citation_results: Optional list of citation check results
         api_key: OpenAI API key
         model: Model to use (default: gpt-4o-mini)
@@ -67,6 +69,12 @@ def generate_recommendations(
         if not_cited_queries:
             citation_context += f"\nQueries where page was NOT cited: {', '.join(not_cited_queries)}"
 
+    # Build headings context
+    headings_context = ""
+    if headings:
+        headings_list = [f"- {h.get('level', 'h2').upper()}: {h.get('text', '')}" for h in headings[:10]]
+        headings_context = f"\n\nPage Headings:\n" + "\n".join(headings_list)
+
     # Build content context
     content_context = f"""Page Title: {title}
 
@@ -75,7 +83,7 @@ First Paragraph: {first_paragraph}
 Content Excerpt (first 500 words): {first_500_words[:1500]}
 
 Direct Answer Score: {direct_answer_score}/100
-{citation_context}"""
+{citation_context}{headings_context}"""
 
     prompt = """You are an AEO (Answer Engine Optimization) expert. Based on this content analysis, provide exactly 3 specific, actionable recommendations to improve this page's chances of being cited by AI search engines like ChatGPT, Perplexity, and Google AI Overviews.
 
