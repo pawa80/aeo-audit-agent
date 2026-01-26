@@ -13,21 +13,21 @@ from query_generator import generate_queries_from_intents
 
 
 def display_score_gauge(score: int) -> None:
-    """Display a visual score indicator with brand colors."""
+    """Display a visual score indicator with amber styling."""
     if score >= 70:
-        color = "#0A7C7C"  # Teal - Good
         status = "Good"
     elif score >= 40:
-        color = "#FF9500"  # Amber - Needs Work
         status = "Needs Work"
     else:
-        color = "#C74B4B"  # Muted red - Poor
         status = "Poor"
+
+    # Always use amber for the score, status color varies
+    status_color = "#2E8B8B" if score >= 70 else "#F5A623" if score >= 40 else "#E74C3C"
 
     st.markdown(f"""
     <div style="text-align: center; padding: 20px;">
-        <div style="font-size: 48px; font-weight: 900; color: {color};">{score}/100</div>
-        <div style="font-size: 18px; font-weight: 600; color: {color};">{status}</div>
+        <div style="font-size: 56px; font-weight: 700; color: #F5A623;">{score}/100</div>
+        <div style="font-size: 18px; font-weight: 600; color: {status_color};">{status}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -138,112 +138,194 @@ def main():
     st.markdown("""
 <style>
     /* Import Inter font */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
     /* Global font */
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
     }
 
-    /* Header styling */
-    header[data-testid="stHeader"] {
-        background-color: #2C3135;
+    /* Main background */
+    .stApp {
+        background-color: #FFFFFF;
     }
 
-    /* Main title */
-    h1 {
-        color: #FF9500 !important;
-        font-weight: 900;
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background-color: #1A1A2E;
+        padding: 24px;
     }
 
-    /* Section headers */
-    h2, h3 {
-        color: #2C3135 !important;
-        font-weight: 700;
+    [data-testid="stSidebar"] * {
+        color: #FFFFFF;
     }
 
-    /* Primary buttons (Amber) */
-    .stButton > button[kind="primary"] {
-        background-color: #FF9500;
-        color: #2C3135;
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3 {
+        color: #FFFFFF !important;
+    }
+
+    /* Sidebar input fields */
+    [data-testid="stSidebar"] .stTextInput > div > div > input {
+        background-color: #FFFFFF;
+        color: #1A1A2E;
+        border: 1px solid #CCCCCC;
+        border-radius: 8px;
+    }
+
+    /* Primary button styling */
+    .stButton > button {
+        background-color: #F5A623;
+        color: #FFFFFF;
         border: none;
+        border-radius: 8px;
+        padding: 12px 24px;
         font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
 
-    .stButton > button[kind="primary"]:hover {
-        background-color: #E68600;
-        color: #2C3135;
+    .stButton > button:hover {
+        background-color: #E09620;
+        color: #FFFFFF;
+        border: none;
     }
 
-    /* Secondary buttons */
+    .stButton > button:focus {
+        background-color: #E09620;
+        color: #FFFFFF;
+        border: none;
+        box-shadow: none;
+    }
+
+    /* Secondary button styling */
     .stButton > button[kind="secondary"] {
-        background-color: #FFFFFF;
-        color: #2C3135;
-        border: 1px solid #8B8B8B;
+        background-color: transparent;
+        color: #F5A623;
+        border: 2px solid #F5A623;
     }
 
-    /* Checkboxes - Teal when checked */
-    .stCheckbox > label > div[data-testid="stMarkdownContainer"] {
-        color: #2C3135;
-    }
-
-    /* Success messages */
-    .stSuccess {
-        background-color: rgba(10, 124, 124, 0.1);
-        border-left: 4px solid #0A7C7C;
-    }
-
-    /* Warning/info boxes */
-    .stInfo {
-        background-color: rgba(255, 149, 0, 0.1);
-        border-left: 4px solid #FF9500;
-    }
-
-    /* Results cards - Amber left border */
-    div[data-testid="stExpander"] {
-        border-left: 3px solid #FF9500;
-        background-color: #FFFFFF;
-    }
-
-    /* Metrics styling */
-    [data-testid="stMetricValue"] {
-        color: #2C3135;
-        font-weight: 700;
-    }
-
-    /* Secondary text */
-    .stCaption, small {
-        color: #8B8B8B;
-    }
-
-    /* Links */
-    a {
-        color: #0A7C7C;
-    }
-
-    a:hover {
-        color: #FF9500;
-    }
-
-    /* Card-like containers */
-    div[data-testid="stVerticalBlock"] > div {
-        padding: 0.5rem;
-    }
-
-    /* Footer */
-    footer {
-        color: #8B8B8B;
+    .stButton > button[kind="secondary"]:hover {
+        background-color: rgba(245, 166, 35, 0.1);
+        color: #F5A623;
+        border: 2px solid #F5A623;
     }
 
     /* Input fields */
     .stTextInput > div > div > input {
-        border-color: #8B8B8B;
+        background-color: #FFFFFF;
+        border: 1px solid #CCCCCC;
+        border-radius: 8px;
+        padding: 12px;
+        color: #1A1A2E;
     }
 
     .stTextInput > div > div > input:focus {
-        border-color: #FF9500;
-        box-shadow: 0 0 0 1px #FF9500;
+        border-color: #F5A623;
+        box-shadow: 0 0 0 1px #F5A623;
     }
+
+    /* Section headers */
+    h1 {
+        color: #1A1A2E !important;
+        font-weight: 700;
+        font-size: 32px;
+    }
+
+    h2, h3 {
+        color: #1A1A2E !important;
+        font-weight: 600;
+    }
+
+    /* Metric styling for scores */
+    [data-testid="stMetricValue"] {
+        color: #F5A623;
+        font-size: 48px;
+        font-weight: 700;
+    }
+
+    [data-testid="stMetricLabel"] {
+        color: #333333;
+    }
+
+    /* Checkbox styling */
+    .stCheckbox label span {
+        color: #333333;
+    }
+
+    /* Success messages - teal accent */
+    .stSuccess {
+        background-color: rgba(46, 139, 139, 0.1);
+        border-left: 4px solid #2E8B8B;
+        color: #1A1A2E;
+    }
+
+    /* Warning messages - amber accent */
+    .stWarning {
+        background-color: rgba(245, 166, 35, 0.1);
+        border-left: 4px solid #F5A623;
+        color: #1A1A2E;
+    }
+
+    /* Info messages - amber accent */
+    .stInfo {
+        background-color: rgba(245, 166, 35, 0.1);
+        border-left: 4px solid #F5A623;
+        color: #1A1A2E;
+    }
+
+    /* Error messages - red accent */
+    .stError {
+        background-color: rgba(231, 76, 60, 0.1);
+        border-left: 4px solid #E74C3C;
+        color: #1A1A2E;
+    }
+
+    /* Expander styling */
+    div[data-testid="stExpander"] {
+        background-color: #FFFFFF;
+        border: 1px solid #E0E0E0;
+        border-radius: 8px;
+    }
+
+    div[data-testid="stExpander"] details summary {
+        color: #1A1A2E;
+        font-weight: 600;
+    }
+
+    /* Cards/containers */
+    .element-container {
+        background-color: #FFFFFF;
+    }
+
+    /* Spinner */
+    .stSpinner > div {
+        border-top-color: #F5A623 !important;
+    }
+
+    /* Links */
+    a {
+        color: #F5A623;
+    }
+
+    a:hover {
+        color: #E09620;
+    }
+
+    /* Caption/secondary text */
+    .stCaption {
+        color: #666666;
+    }
+
+    /* Dividers */
+    hr {
+        border-color: #E5E5E5;
+    }
+
+    /* Hide Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -264,7 +346,7 @@ def main():
     if "regenerated_queries" not in st.session_state:
         st.session_state.regenerated_queries = []
 
-    st.title("AEO Audit Agent")
+    st.title("AEO AUDIT AGENT")
     st.caption("v0.3 | Answer Engine Optimization")
 
     st.markdown("""
@@ -338,11 +420,11 @@ def main():
             # Select All / Select None buttons
             col1, col2, col3 = st.columns([1, 1, 4])
             with col1:
-                if st.button("Select All", type="secondary", use_container_width=True):
+                if st.button("Select All", use_container_width=True):
                     st.session_state.selected_intents = st.session_state.extracted_intents.copy()
                     st.rerun()
             with col2:
-                if st.button("Select None", type="secondary", use_container_width=True):
+                if st.button("Select None", use_container_width=True):
                     st.session_state.selected_intents = []
                     st.rerun()
 
@@ -412,7 +494,7 @@ def main():
             # Allow skipping intent validation
             col1, col2 = st.columns([1, 4])
             with col1:
-                if st.button("Skip Intent Validation", type="secondary", use_container_width=True):
+                if st.button("Skip Intent Validation", use_container_width=True):
                     st.session_state.intent_validated = True
                     st.session_state.regenerated_queries = result.generated_queries
                     st.rerun()
@@ -435,15 +517,13 @@ def main():
                         for intent in st.session_state.selected_intents:
                             st.markdown(f"- {intent}")
 
-                # Display generated queries with count
-                num_queries = len(queries_to_use)
+                # Display generated queries
                 if st.session_state.regenerated_queries and st.session_state.selected_intents:
-                    num_intents = len(st.session_state.selected_intents)
-                    st.markdown(f"**Generated Queries ({num_queries}):** *(1-3 per intent, based on {num_intents} selected intents)*")
+                    st.markdown("**Generated Queries:** *(based on your selected intents)*")
                 elif result.queries_ai_generated:
-                    st.markdown(f"**Generated Queries ({num_queries}):** *(AI-generated using GPT-4o-mini)*")
+                    st.markdown("**Generated Queries:** *(AI-generated using GPT-4o-mini)*")
                 else:
-                    st.markdown(f"**Generated Queries ({num_queries}):** *(rule-based fallback)*")
+                    st.markdown("**Generated Queries:** *(rule-based fallback)*")
 
                 for i, query in enumerate(queries_to_use, 1):
                     st.markdown(f"{i}. {query}")
@@ -468,7 +548,7 @@ def main():
                 with col1:
                     check_button = st.button(
                         "Check Citations",
-                        type="primary",
+                        type="secondary",
                         use_container_width=True,
                         disabled=not api_key_available
                     )
@@ -514,7 +594,7 @@ def main():
                     with col1:
                         recommend_button = st.button(
                             "Get Recommendations",
-                            type="primary",
+                            type="secondary",
                             use_container_width=True,
                             disabled=not openai_key_available
                         )
@@ -545,7 +625,7 @@ def main():
     # Footer
     st.markdown("---")
     st.markdown(
-        "<div style='text-align: center; color: #8B8B8B; font-size: 12px;'>"
+        "<div style='text-align: center; color: #666666; font-size: 12px; padding: 16px 0;'>"
         "AEO Audit Agent v0.3 | Built for Answer Engine Optimization"
         "</div>",
         unsafe_allow_html=True
