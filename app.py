@@ -322,13 +322,15 @@ def main():
                         for intent in st.session_state.selected_intents:
                             st.markdown(f"- {intent}")
 
-                # Display generated queries
+                # Display generated queries with count
+                num_queries = len(queries_to_use)
                 if st.session_state.regenerated_queries and st.session_state.selected_intents:
-                    st.markdown("**Generated Queries:** *(based on your selected intents)*")
+                    num_intents = len(st.session_state.selected_intents)
+                    st.markdown(f"**Generated Queries ({num_queries}):** *(1-3 per intent, based on {num_intents} selected intents)*")
                 elif result.queries_ai_generated:
-                    st.markdown("**Generated Queries:** *(AI-generated using GPT-4o-mini)*")
+                    st.markdown(f"**Generated Queries ({num_queries}):** *(AI-generated using GPT-4o-mini)*")
                 else:
-                    st.markdown("**Generated Queries:** *(rule-based fallback)*")
+                    st.markdown(f"**Generated Queries ({num_queries}):** *(rule-based fallback)*")
 
                 for i, query in enumerate(queries_to_use, 1):
                     st.markdown(f"{i}. {query}")

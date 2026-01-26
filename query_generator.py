@@ -141,11 +141,12 @@ def generate_queries_from_intents(
     selected_intents: list[str],
     api_key: str,
     model: str = "gpt-4o-mini",
-    max_tokens: int = 100,
+    max_tokens: int = 300,
     temperature: float = 0.7
 ) -> QueryGenerationResult:
     """
     Generate search queries based on user-selected intents.
+    Generates 1-3 queries per intent depending on complexity.
 
     Args:
         title: Page title
@@ -171,15 +172,18 @@ def generate_queries_from_intents(
     # Format intents for prompt
     intents_text = "\n".join(f"- {intent}" for intent in selected_intents)
 
-    prompt = f"""Generate 3 realistic search queries that someone might type into an AI search engine.
+    prompt = f"""Generate search queries based on these user intents.
+Generate 1-3 queries per intent depending on the intent's complexity and search variations.
+Each query should be a realistic phrase someone would type into an AI search engine.
 
-The user has confirmed these intents for the page:
+Page context:
+Title: {title}
+First paragraph: {first_paragraph}
+
+Selected intents:
 {intents_text}
 
-The page title is: {title}
-The first paragraph is: {first_paragraph}
-
-Generate queries that align with the confirmed intents. Return only the queries, one per line, no numbering or explanation."""
+Return only the queries, one per line, no numbering or explanation."""
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -242,16 +246,24 @@ Generate queries that align with the confirmed intents. Return only the queries,
             if cleaned:
                 cleaned_queries.append(cleaned)
 
-        if len(cleaned_queries) >= 3:
+        # Accept any number of queries >= number of intents
+        min_expected = len(selected_intents)
+        if len(cleaned_queries) >= min_expected:
             return QueryGenerationResult(
-                queries=cleaned_queries[:3],
+                queries=cleaned_queries,
+                is_ai_generated=True
+            )
+        elif len(cleaned_queries) > 0:
+            # Return what we got even if fewer than expected
+            return QueryGenerationResult(
+                queries=cleaned_queries,
                 is_ai_generated=True
             )
         else:
             return QueryGenerationResult(
                 queries=[],
                 is_ai_generated=False,
-                error="LLM returned fewer than 3 queries"
+                error="LLM returned no valid queries"
             )
 
     except (KeyError, IndexError) as e:
