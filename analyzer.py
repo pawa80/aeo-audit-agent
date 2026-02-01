@@ -27,6 +27,7 @@ class AnalysisResult:
     headings: list[dict] = None  # List of {"level": "h1/h2/h3", "text": "..."}
     generated_queries: list[str] = None
     queries_ai_generated: bool = False
+    full_content: str = ""
     error_message: Optional[str] = None
 
     def __post_init__(self):
@@ -364,5 +365,6 @@ def analyze_url(url: str, openai_api_key: Optional[str] = None) -> AnalysisResul
         extraction_success=True,
         headings=headings,
         generated_queries=queries,
-        queries_ai_generated=ai_generated
+        queries_ai_generated=ai_generated,
+        full_content=full_text
     )

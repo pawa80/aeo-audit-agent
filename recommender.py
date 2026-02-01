@@ -5,10 +5,102 @@ Uses OpenAI GPT-4o-mini to generate actionable recommendations for improving
 a page's chances of being cited by AI search engines.
 """
 
+import json
 from dataclasses import dataclass
 from typing import Optional
 
+from openai import OpenAI
 import requests
+
+
+AEO_GUIDE = """
+# AEO OPTIMIZATION GUIDE
+
+## CORE PRINCIPLES
+
+### What is AEO?
+Answer Engine Optimization (AEO) is the practice of structuring web content so AI-powered systems (ChatGPT, Perplexity, Google AI Overviews) can extract, trust, and cite your content in generated answers.
+
+### How AI Selects Citations (The 6-Source Authority Set)
+AI engines analyze ~20-50 candidate pages per query but only cite 5-7 in responses. Selection criteria:
+1. **Semantic match** - Content directly answers the query intent
+2. **Answer positioning** - Direct answer appears within first 100 words
+3. **Trust signals** - Author credentials, publication date, domain authority
+4. **Structural clarity** - Clean HTML, proper headings, schema markup
+5. **Grounding efficiency** - Concise, quotable statements (not walls of text)
+
+### The Grounding Budget (~2000 words)
+AI has limited context per source. Your page competes for inclusion in this budget.
+- **First 200 words = critical** (often all that's grounded)
+- **Direct answer in paragraph 1** = high citation probability
+- **Buried answer in paragraph 5** = low citation probability
+
+## USER INTENT HIERARCHY
+
+Priority order for optimization:
+1. **Definitional** - "What is X?" → Provide clear definition in first sentence
+2. **Procedural** - "How to X?" → Numbered steps, start with action verb
+3. **Comparative** - "X vs Y" → Side-by-side breakdown, clear verdict
+4. **Evaluative** - "Best X for Y" → Ranked list with reasoning
+5. **Troubleshooting** - "X not working" → Problem/cause/solution format
+6. **Factual** - "When/where/who X?" → Direct answer, then context
+
+## CONTENT STRUCTURE RULES
+
+### Semantic Triples
+AI parses content as subject-predicate-object relationships.
+- **Good:** "First-party data is information collected directly from customers."
+- **Bad:** "When we talk about data collection, there are many approaches companies take..."
+
+### Answer Positioning
+- First paragraph must contain the direct answer
+- Don't start with questions, history, or preamble
+- Hook with value, not curiosity
+
+### Optimal Paragraph Structure
+1. **Lead:** Direct answer to likely query (1-2 sentences)
+2. **Support:** Evidence, data, or explanation (2-3 sentences)
+3. **Bridge:** Transition to next concept
+
+## TECHNICAL REQUIREMENTS
+
+### Schema Markup (Structured Data)
+- FAQ schema for question-answer content
+- HowTo schema for tutorials
+- Article schema with author, datePublished, dateModified
+- Organization schema for brand content
+
+### HTML Structure
+- One H1 containing primary keyword
+- H2s for major sections (should match likely queries)
+- H3s for sub-topics
+- Lists for scannable information
+
+## AUTHORITY SIGNALS
+
+### E-E-A-T Implementation
+- **Experience:** First-hand examples, case studies
+- **Expertise:** Author credentials, methodology
+- **Authoritativeness:** Citations to primary sources, data
+- **Trust:** Contact info, about page, clear ownership
+
+## COMMON AEO FAILURE PATTERNS
+
+1. **Answer buried** - Direct answer appears after paragraph 3
+2. **Passive voice** - "It is believed that..." vs "Research shows..."
+3. **Missing definition** - Assumes reader knows terminology
+4. **Wall of text** - No structure, hard to extract quotes
+5. **Outdated content** - No date signals, stale information
+6. **Thin content** - Under 500 words, lacks depth
+
+## OUTPUT FORMAT
+
+When analyzing a page, provide:
+1. **Summary:** 2-3 sentence AEO assessment
+2. **Critical Issues:** Urgent problems affecting citation probability
+3. **Action Plan:** Prioritized fixes with before/after examples
+4. **Quick Wins:** Easy changes with immediate impact
+"""
 
 
 @dataclass
@@ -19,165 +111,111 @@ class RecommendationResult:
     error: Optional[str] = None
 
 
-def generate_recommendations(
-    title: str,
-    first_paragraph: str,
-    first_500_words: str,
-    direct_answer_score: int,
-    headings: Optional[list[dict]] = None,
-    citation_results: Optional[list] = None,
-    api_key: str = "",
-    model: str = "gpt-4o-mini",
-    max_tokens: int = 300,
-    temperature: float = 0.7
-) -> RecommendationResult:
-    """
-    Generate AEO recommendations using OpenAI GPT-4o-mini.
+def generate_recommendations(title, full_content, first_paragraph, direct_answer_score, citation_results, selected_intents, api_key):
+    """Generate expert-grounded AEO recommendations with structured output."""
 
-    Args:
-        title: Page title
-        first_paragraph: First paragraph of content
-        first_500_words: First 500 words of content
-        direct_answer_score: Score from direct answer analysis (0-100)
-        headings: Optional list of heading dicts with 'level' and 'text' keys
-        citation_results: Optional list of citation check results
-        api_key: OpenAI API key
-        model: Model to use (default: gpt-4o-mini)
-        max_tokens: Maximum tokens in response
-        temperature: Sampling temperature
+    client = OpenAI(api_key=api_key)
 
-    Returns:
-        RecommendationResult with recommendations and status
-    """
-    if not api_key:
-        return RecommendationResult(
-            recommendations=[],
-            success=False,
-            error="OpenAI API key not provided"
-        )
+    # Format citation results for prompt
+    cited_queries = [r['query'] for r in citation_results if r.get('cited')]
+    uncited_queries = [r['query'] for r in citation_results if not r.get('cited')]
+    citation_rate = len(cited_queries) / len(citation_results) * 100 if citation_results else 0
 
-    endpoint = "https://api.openai.com/v1/chat/completions"
+    # Truncate full_content to prevent token overflow (keep first 8000 chars)
+    content_for_analysis = full_content[:8000] if full_content else ""
 
-    # Build citation context
-    citation_context = ""
-    if citation_results:
-        cited_queries = [r.query for r in citation_results if r.cited]
-        not_cited_queries = [r.query for r in citation_results if not r.cited and not r.error]
+    prompt = f"""You are an AEO (Answer Engine Optimization) expert. Analyze this page and provide specific, actionable recommendations.
 
-        if cited_queries:
-            citation_context += f"\nQueries where page WAS cited: {', '.join(cited_queries)}"
-        if not_cited_queries:
-            citation_context += f"\nQueries where page was NOT cited: {', '.join(not_cited_queries)}"
+## AEO METHODOLOGY REFERENCE
+{AEO_GUIDE}
 
-    # Build headings context
-    headings_context = ""
-    if headings:
-        headings_list = [f"- {h.get('level', 'h2').upper()}: {h.get('text', '')}" for h in headings[:10]]
-        headings_context = f"\n\nPage Headings:\n" + "\n".join(headings_list)
+## PAGE BEING ANALYZED
 
-    # Build content context
-    content_context = f"""Page Title: {title}
+**Title:** {title}
 
-First Paragraph: {first_paragraph}
+**Direct Answer Score:** {direct_answer_score}/100
 
-Content Excerpt (first 500 words): {first_500_words[:1500]}
+**First Paragraph:**
+{first_paragraph}
 
-Direct Answer Score: {direct_answer_score}/100
-{citation_context}{headings_context}"""
+**User Intents Being Targeted:**
+{chr(10).join(f'- {intent}' for intent in selected_intents) if selected_intents else 'None specified'}
 
-    prompt = """You are an AEO (Answer Engine Optimization) expert. Based on this content analysis, provide exactly 3 specific, actionable recommendations to improve this page's chances of being cited by AI search engines like ChatGPT, Perplexity, and Google AI Overviews.
+**Citation Check Results:**
+- Citation Rate: {citation_rate:.0f}%
+- Cited Queries: {', '.join(cited_queries) if cited_queries else 'None'}
+- Uncited Queries: {', '.join(uncited_queries) if uncited_queries else 'None'}
 
-Be specific - reference actual content from the page. Focus on:
-- How to make the opening more "answer-ready"
-- Structural improvements for AI parsing
-- Content gaps that would help AI cite this page
+**Full Page Content:**
+{content_for_analysis}
 
-Format: one recommendation per line, no numbering or bullet points. Each should be 1-2 sentences max."""
+## YOUR TASK
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
+Analyze this page against the AEO methodology and provide a structured assessment.
 
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": content_context}
-        ],
-        "max_tokens": max_tokens,
-        "temperature": temperature
-    }
+Respond ONLY with valid JSON in this exact format:
+{{
+    "summary": "2-3 sentence assessment of the page's AEO readiness",
+    "critical_issues": ["Issue 1 that must be fixed", "Issue 2 if any"],
+    "action_plan": [
+        {{
+            "priority": 1,
+            "action": "Specific action to take",
+            "reason": "Why this matters for AEO",
+            "current_text": "Quote the problematic text from the page",
+            "suggested_text": "Rewritten version following AEO principles"
+        }},
+        {{
+            "priority": 2,
+            "action": "Second action",
+            "reason": "Why this matters",
+            "current_text": "Current text",
+            "suggested_text": "Improved text"
+        }},
+        {{
+            "priority": 3,
+            "action": "Third action",
+            "reason": "Why this matters",
+            "current_text": "Current text if applicable",
+            "suggested_text": "Improved text if applicable"
+        }}
+    ],
+    "quick_wins": ["Easy change 1", "Easy change 2", "Easy change 3"]
+}}
+
+Focus on the MOST impactful changes first. Be specific - quote actual text from the page and provide concrete rewrites. Reference the AEO methodology principles in your reasoning.
+"""
 
     try:
-        response = requests.post(
-            endpoint,
-            headers=headers,
-            json=payload,
-            timeout=30
-        )
-        response.raise_for_status()
-        data = response.json()
-
-    except requests.exceptions.Timeout:
-        return RecommendationResult(
-            recommendations=[],
-            success=False,
-            error="Request timed out"
-        )
-    except requests.exceptions.HTTPError as e:
-        error_msg = f"API error: {e.response.status_code}"
-        if e.response.status_code == 401:
-            error_msg = "Invalid API key"
-        elif e.response.status_code == 429:
-            error_msg = "Rate limit exceeded"
-        return RecommendationResult(
-            recommendations=[],
-            success=False,
-            error=error_msg
-        )
-    except requests.exceptions.RequestException as e:
-        return RecommendationResult(
-            recommendations=[],
-            success=False,
-            error=f"Request failed: {str(e)}"
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=2000,
+            temperature=0.3
         )
 
-    # Parse response
-    try:
-        content = data["choices"][0]["message"]["content"].strip()
-        # Split by newlines and clean up
-        recommendations = [r.strip() for r in content.split("\n") if r.strip()]
+        result_text = response.choices[0].message.content.strip()
 
-        # Remove any numbering or bullet points
-        cleaned = []
-        for rec in recommendations:
-            # Remove common prefixes
-            cleaned_rec = rec.lstrip("0123456789.-)*•→ ").strip()
-            if cleaned_rec and len(cleaned_rec) > 10:
-                cleaned.append(cleaned_rec)
+        # Clean up JSON if wrapped in markdown code blocks
+        if result_text.startswith("```"):
+            result_text = result_text.split("```")[1]
+            if result_text.startswith("json"):
+                result_text = result_text[4:]
+        result_text = result_text.strip()
 
-        if len(cleaned) >= 3:
-            return RecommendationResult(
-                recommendations=cleaned[:3],
-                success=True
-            )
-        elif cleaned:
-            # Return what we have even if fewer than 3
-            return RecommendationResult(
-                recommendations=cleaned,
-                success=True
-            )
-        else:
-            return RecommendationResult(
-                recommendations=[],
-                success=False,
-                error="Could not parse recommendations from response"
-            )
+        return json.loads(result_text)
 
-    except (KeyError, IndexError) as e:
-        return RecommendationResult(
-            recommendations=[],
-            success=False,
-            error=f"Failed to parse response: {str(e)}"
-        )
+    except json.JSONDecodeError as e:
+        return {
+            "summary": "Unable to parse recommendations. Please try again.",
+            "critical_issues": [],
+            "action_plan": [],
+            "quick_wins": []
+        }
+    except Exception as e:
+        return {
+            "summary": f"Error generating recommendations: {str(e)}",
+            "critical_issues": [],
+            "action_plan": [],
+            "quick_wins": []
+        }
