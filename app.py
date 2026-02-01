@@ -602,25 +602,54 @@ def main():
                     if recommend_button and openai_key_available:
                         with st.spinner("Generating recommendations..."):
                             openai_key = st.secrets["OPENAI_API_KEY"]
+                            # Convert CitationResult objects to dicts for recommender
+                            citation_dicts = [
+                                {'query': r.query, 'cited': r.cited}
+                                for r in st.session_state.citation_results
+                            ] if st.session_state.citation_results else []
+
                             rec_result = generate_recommendations(
                                 title=result.title,
+                                full_content=result.full_content,
                                 first_paragraph=result.first_paragraph,
-                                first_500_words=result.first_500_words,
                                 direct_answer_score=result.direct_answer_score,
-                                headings=result.headings,
-                                citation_results=st.session_state.citation_results,
+                                citation_results=citation_dicts,
+                                selected_intents=st.session_state.get('selected_intents', []),
                                 api_key=openai_key
                             )
                             st.session_state.recommendations = rec_result
 
                     # Display recommendations if available
                     if st.session_state.recommendations:
-                        rec_result = st.session_state.recommendations
-                        if rec_result.success and rec_result.recommendations:
-                            for i, rec in enumerate(rec_result.recommendations, 1):
-                                st.info(f"**{i}.** {rec}")
-                        elif rec_result.error:
-                            st.error(f"Failed to generate recommendations: {rec_result.error}")
+                        recs = st.session_state.recommendations
+                        if isinstance(recs, dict):
+                            st.subheader("Summary")
+                            st.write(recs.get("summary", ""))
+
+                            if recs.get("critical_issues"):
+                                st.subheader("Critical Issues")
+                                for issue in recs["critical_issues"]:
+                                    st.warning(issue)
+
+                            if recs.get("action_plan"):
+                                st.subheader("Action Plan")
+                                for item in recs["action_plan"]:
+                                    st.markdown(f"**Priority {item.get('priority', '?')}:** {item.get('action', '')}")
+                                    st.markdown(f"*Why:* {item.get('reason', '')}")
+                                    if item.get('current_text'):
+                                        st.markdown(f"**Current:** {item.get('current_text', '')}")
+                                    if item.get('suggested_text'):
+                                        st.markdown(f"**Suggested:** {item.get('suggested_text', '')}")
+                                    st.divider()
+
+                            if recs.get("quick_wins"):
+                                st.subheader("Quick Wins")
+                                for win in recs["quick_wins"]:
+                                    st.success(win)
+                        else:
+                            # Fallback for old format (list of strings)
+                            for rec in recs:
+                                st.write(f"• {rec}")
 
     # Footer
     st.markdown("---")
