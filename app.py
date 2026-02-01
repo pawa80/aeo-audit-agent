@@ -5,11 +5,143 @@ A tool to analyze web pages for Answer Engine Optimization.
 """
 
 import streamlit as st
+from fpdf import FPDF
+import base64
+from datetime import datetime
 from analyzer import analyze_url, AnalysisResult
 from perplexity_checker import check_all_queries, get_citation_summary, CitationResult
 from recommender import generate_recommendations
 from intent_extractor import extract_intents
 from query_generator import generate_queries_from_intents
+
+
+def generate_claude_prompt(url, title, recommendations):
+    """Generate a prompt for Claude Extension to implement changes."""
+    prompt_parts = [
+        "I need you to help me improve this page for AI search engines (AEO optimization).",
+        "",
+        f"Page: {title}",
+        f"URL: {url}",
+        "",
+        "## Changes to Make",
+        ""
+    ]
+
+    if recommendations.get('action_plan'):
+        for i, item in enumerate(recommendations['action_plan'], 1):
+            prompt_parts.append(f"### Change {i}: {item.get('action', 'Update content')}")
+            prompt_parts.append(f"**Reason:** {item.get('reason', 'Improve AEO')}")
+            prompt_parts.append("")
+            prompt_parts.append("**Find this text:**")
+            prompt_parts.append("```")
+            prompt_parts.append(item.get('current_text', '[text to find]'))
+            prompt_parts.append("```")
+            prompt_parts.append("")
+            prompt_parts.append("**Replace with:**")
+            prompt_parts.append("```")
+            prompt_parts.append(item.get('suggested_text', '[replacement text]'))
+            prompt_parts.append("```")
+            prompt_parts.append("")
+
+    if recommendations.get('quick_wins'):
+        prompt_parts.append("## Additional Quick Improvements")
+        for win in recommendations['quick_wins']:
+            prompt_parts.append(f"- {win}")
+        prompt_parts.append("")
+
+    prompt_parts.append("Please make these changes to the page content. Show me the updated sections when done.")
+
+    return "\n".join(prompt_parts)
+
+
+def generate_pdf_report(url, title, recommendations, citation_results=None):
+    """Generate a PDF report of the AEO audit."""
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    # Title
+    pdf.set_font('Helvetica', 'B', 20)
+    pdf.cell(0, 10, 'AEO Audit Report', ln=True, align='C')
+    pdf.ln(5)
+
+    # Meta info
+    pdf.set_font('Helvetica', '', 10)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 6, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")}', ln=True)
+    pdf.cell(0, 6, f'URL: {url}', ln=True)
+    pdf.cell(0, 6, f'Page Title: {title}', ln=True)
+    pdf.ln(10)
+
+    # Reset text color
+    pdf.set_text_color(0, 0, 0)
+
+    # Citation Results (if available)
+    if citation_results:
+        pdf.set_font('Helvetica', 'B', 14)
+        pdf.cell(0, 10, 'Citation Check Results', ln=True)
+        pdf.set_font('Helvetica', '', 11)
+        cited = sum(1 for r in citation_results if r.get('cited'))
+        total = len(citation_results)
+        pdf.cell(0, 6, f'Citation Rate: {cited}/{total} queries ({int(cited/total*100) if total > 0 else 0}%)', ln=True)
+        pdf.ln(5)
+
+    # Summary
+    if recommendations.get('summary'):
+        pdf.set_font('Helvetica', 'B', 14)
+        pdf.cell(0, 10, 'Summary', ln=True)
+        pdf.set_font('Helvetica', '', 11)
+        pdf.multi_cell(0, 6, recommendations['summary'])
+        pdf.ln(5)
+
+    # Critical Issues
+    if recommendations.get('critical_issues'):
+        pdf.set_font('Helvetica', 'B', 14)
+        pdf.cell(0, 10, 'Critical Issues', ln=True)
+        pdf.set_font('Helvetica', '', 11)
+        for issue in recommendations['critical_issues']:
+            pdf.multi_cell(0, 6, f'* {issue}')
+        pdf.ln(5)
+
+    # Action Plan
+    if recommendations.get('action_plan'):
+        pdf.set_font('Helvetica', 'B', 14)
+        pdf.cell(0, 10, 'Action Plan', ln=True)
+
+        for item in recommendations['action_plan']:
+            pdf.set_font('Helvetica', 'B', 12)
+            pdf.multi_cell(0, 6, f"Priority {item.get('priority', '?')}: {item.get('action', '')}")
+
+            pdf.set_font('Helvetica', 'I', 10)
+            pdf.multi_cell(0, 5, f"Why: {item.get('reason', '')}")
+
+            if item.get('current_text'):
+                pdf.set_font('Helvetica', 'B', 10)
+                pdf.cell(0, 6, 'Current:', ln=True)
+                pdf.set_font('Helvetica', '', 10)
+                pdf.set_text_color(150, 50, 50)
+                pdf.multi_cell(0, 5, item.get('current_text', ''))
+                pdf.set_text_color(0, 0, 0)
+
+            if item.get('suggested_text'):
+                pdf.set_font('Helvetica', 'B', 10)
+                pdf.cell(0, 6, 'Suggested:', ln=True)
+                pdf.set_font('Helvetica', '', 10)
+                pdf.set_text_color(50, 150, 50)
+                pdf.multi_cell(0, 5, item.get('suggested_text', ''))
+                pdf.set_text_color(0, 0, 0)
+
+            pdf.ln(5)
+
+    # Quick Wins
+    if recommendations.get('quick_wins'):
+        pdf.set_font('Helvetica', 'B', 14)
+        pdf.cell(0, 10, 'Quick Wins', ln=True)
+        pdf.set_font('Helvetica', '', 11)
+        for win in recommendations['quick_wins']:
+            pdf.multi_cell(0, 6, f'* {win}')
+
+    return pdf.output()
 
 
 def display_score_gauge(score: int) -> None:
@@ -619,36 +751,108 @@ def main():
                             )
                             st.session_state.recommendations = rec_result
 
-                    # Display recommendations if available
+                    # Display structured recommendations
                     if st.session_state.recommendations:
-                        recs = st.session_state.recommendations
-                        if isinstance(recs, dict):
-                            st.subheader("Summary")
-                            st.write(recs.get("summary", ""))
+                        if isinstance(st.session_state.recommendations, dict):
+                            recommendations = st.session_state.recommendations
 
-                            if recs.get("critical_issues"):
-                                st.subheader("Critical Issues")
-                                for issue in recs["critical_issues"]:
-                                    st.warning(issue)
+                            # Summary
+                            if recommendations.get('summary'):
+                                st.info(f"**Assessment:** {recommendations['summary']}")
 
-                            if recs.get("action_plan"):
-                                st.subheader("Action Plan")
-                                for item in recs["action_plan"]:
-                                    st.markdown(f"**Priority {item.get('priority', '?')}:** {item.get('action', '')}")
-                                    st.markdown(f"*Why:* {item.get('reason', '')}")
-                                    if item.get('current_text'):
-                                        st.markdown(f"**Current:** {item.get('current_text', '')}")
-                                    if item.get('suggested_text'):
-                                        st.markdown(f"**Suggested:** {item.get('suggested_text', '')}")
-                                    st.divider()
+                            # Critical Issues
+                            if recommendations.get('critical_issues'):
+                                st.subheader("🚨 Critical Issues")
+                                for issue in recommendations['critical_issues']:
+                                    st.error(issue)
 
-                            if recs.get("quick_wins"):
-                                st.subheader("Quick Wins")
-                                for win in recs["quick_wins"]:
-                                    st.success(win)
+                            # Action Plan
+                            if recommendations.get('action_plan'):
+                                st.subheader("📋 Action Plan")
+                                for item in recommendations['action_plan']:
+                                    with st.expander(f"Priority {item.get('priority', '?')}: {item.get('action', 'Action')}", expanded=True):
+                                        st.markdown(f"**Why:** {item.get('reason', '')}")
+
+                                        col1, col2 = st.columns(2)
+                                        with col1:
+                                            st.markdown("**Current:**")
+                                            if item.get('current_text'):
+                                                st.code(item['current_text'], language=None)
+                                            else:
+                                                st.caption("No specific text identified")
+
+                                        with col2:
+                                            st.markdown("**Suggested:**")
+                                            if item.get('suggested_text'):
+                                                st.code(item['suggested_text'], language=None)
+                                            else:
+                                                st.caption("No suggestion provided")
+
+                            # Quick Wins
+                            if recommendations.get('quick_wins'):
+                                st.subheader("⚡ Quick Wins")
+                                for win in recommendations['quick_wins']:
+                                    st.success(f"✓ {win}")
+
+                            # Divider before export options
+                            st.divider()
+
+                            # Export Section
+                            st.subheader("📤 Export Options")
+
+                            # Claude Extension Prompt
+                            st.markdown("### Use with Claude Extension")
+                            st.warning("⚠️ **For best results:** Log in to your CMS as admin and navigate to this page before running the prompt.")
+
+                            claude_prompt = generate_claude_prompt(
+                                url=st.session_state.analysis_result.url,
+                                title=st.session_state.analysis_result.title,
+                                recommendations=recommendations
+                            )
+
+                            st.text_area(
+                                "Prompt for Claude Extension",
+                                value=claude_prompt,
+                                height=300,
+                                help="Copy this prompt and paste it into Claude Extension while viewing your page in the CMS"
+                            )
+
+                            # Copy button (using Streamlit's built-in)
+                            st.download_button(
+                                label="📋 Download Prompt as Text",
+                                data=claude_prompt,
+                                file_name=f"aeo-prompt-{datetime.now().strftime('%Y%m%d-%H%M')}.txt",
+                                mime="text/plain"
+                            )
+
+                            # PDF Report
+                            st.markdown("### Download Full Report")
+
+                            # Convert citation results to dicts for PDF
+                            citation_dicts = None
+                            if st.session_state.get('citation_results'):
+                                citation_dicts = [
+                                    {'query': r.query, 'cited': r.cited}
+                                    for r in st.session_state.citation_results
+                                ]
+
+                            pdf_bytes = generate_pdf_report(
+                                url=st.session_state.analysis_result.url,
+                                title=st.session_state.analysis_result.title,
+                                recommendations=recommendations,
+                                citation_results=citation_dicts
+                            )
+
+                            st.download_button(
+                                label="📄 Download PDF Report",
+                                data=pdf_bytes,
+                                file_name=f"aeo-audit-{datetime.now().strftime('%Y%m%d-%H%M')}.pdf",
+                                mime="application/pdf"
+                            )
+
                         else:
                             # Fallback for old format (list of strings)
-                            for rec in recs:
+                            for rec in st.session_state.recommendations:
                                 st.write(f"• {rec}")
 
     # Footer
