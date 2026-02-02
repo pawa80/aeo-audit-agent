@@ -60,13 +60,22 @@ def generate_pdf_report(url, title, recommendations, citation_results=None):
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
 
+    # Add Unicode font support with fallback
+    try:
+        pdf.add_font('DejaVu', '', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', uni=True)
+        pdf.add_font('DejaVu', 'B', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', uni=True)
+        pdf.add_font('DejaVu', 'I', '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Oblique.ttf', uni=True)
+        font_family = 'DejaVu'
+    except:
+        font_family = 'Helvetica'
+
     # Title
-    pdf.set_font('Helvetica', 'B', 20)
+    pdf.set_font(font_family, 'B', 20)
     pdf.cell(0, 10, 'AEO Audit Report', ln=True, align='C')
     pdf.ln(5)
 
     # Meta info
-    pdf.set_font('Helvetica', '', 10)
+    pdf.set_font(font_family, '', 10)
     pdf.set_text_color(100, 100, 100)
     pdf.cell(0, 6, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")}', ln=True)
     pdf.cell(0, 6, f'URL: {url}', ln=True)
@@ -78,9 +87,9 @@ def generate_pdf_report(url, title, recommendations, citation_results=None):
 
     # Citation Results (if available)
     if citation_results:
-        pdf.set_font('Helvetica', 'B', 14)
+        pdf.set_font(font_family, 'B', 14)
         pdf.cell(0, 10, 'Citation Check Results', ln=True)
-        pdf.set_font('Helvetica', '', 11)
+        pdf.set_font(font_family, '', 11)
         cited = sum(1 for r in citation_results if r.get('cited'))
         total = len(citation_results)
         pdf.cell(0, 6, f'Citation Rate: {cited}/{total} queries ({int(cited/total*100) if total > 0 else 0}%)', ln=True)
@@ -88,45 +97,45 @@ def generate_pdf_report(url, title, recommendations, citation_results=None):
 
     # Summary
     if recommendations.get('summary'):
-        pdf.set_font('Helvetica', 'B', 14)
+        pdf.set_font(font_family, 'B', 14)
         pdf.cell(0, 10, 'Summary', ln=True)
-        pdf.set_font('Helvetica', '', 11)
+        pdf.set_font(font_family, '', 11)
         pdf.multi_cell(0, 6, recommendations['summary'])
         pdf.ln(5)
 
     # Critical Issues
     if recommendations.get('critical_issues'):
-        pdf.set_font('Helvetica', 'B', 14)
+        pdf.set_font(font_family, 'B', 14)
         pdf.cell(0, 10, 'Critical Issues', ln=True)
-        pdf.set_font('Helvetica', '', 11)
+        pdf.set_font(font_family, '', 11)
         for issue in recommendations['critical_issues']:
             pdf.multi_cell(0, 6, f'* {issue}')
         pdf.ln(5)
 
     # Action Plan
     if recommendations.get('action_plan'):
-        pdf.set_font('Helvetica', 'B', 14)
+        pdf.set_font(font_family, 'B', 14)
         pdf.cell(0, 10, 'Action Plan', ln=True)
 
         for item in recommendations['action_plan']:
-            pdf.set_font('Helvetica', 'B', 12)
+            pdf.set_font(font_family, 'B', 12)
             pdf.multi_cell(0, 6, f"Priority {item.get('priority', '?')}: {item.get('action', '')}")
 
-            pdf.set_font('Helvetica', 'I', 10)
+            pdf.set_font(font_family, 'I', 10)
             pdf.multi_cell(0, 5, f"Why: {item.get('reason', '')}")
 
             if item.get('current_text'):
-                pdf.set_font('Helvetica', 'B', 10)
+                pdf.set_font(font_family, 'B', 10)
                 pdf.cell(0, 6, 'Current:', ln=True)
-                pdf.set_font('Helvetica', '', 10)
+                pdf.set_font(font_family, '', 10)
                 pdf.set_text_color(150, 50, 50)
                 pdf.multi_cell(0, 5, item.get('current_text', ''))
                 pdf.set_text_color(0, 0, 0)
 
             if item.get('suggested_text'):
-                pdf.set_font('Helvetica', 'B', 10)
+                pdf.set_font(font_family, 'B', 10)
                 pdf.cell(0, 6, 'Suggested:', ln=True)
-                pdf.set_font('Helvetica', '', 10)
+                pdf.set_font(font_family, '', 10)
                 pdf.set_text_color(50, 150, 50)
                 pdf.multi_cell(0, 5, item.get('suggested_text', ''))
                 pdf.set_text_color(0, 0, 0)
@@ -135,9 +144,9 @@ def generate_pdf_report(url, title, recommendations, citation_results=None):
 
     # Quick Wins
     if recommendations.get('quick_wins'):
-        pdf.set_font('Helvetica', 'B', 14)
+        pdf.set_font(font_family, 'B', 14)
         pdf.cell(0, 10, 'Quick Wins', ln=True)
-        pdf.set_font('Helvetica', '', 11)
+        pdf.set_font(font_family, '', 11)
         for win in recommendations['quick_wins']:
             pdf.multi_cell(0, 6, f'* {win}')
 
