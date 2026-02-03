@@ -5,6 +5,7 @@ Uses OpenAI GPT-4o-mini to generate realistic search queries based on page conte
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
 import requests
@@ -171,8 +172,11 @@ def generate_queries_from_intents(
 
     # Format intents for prompt
     intents_text = "\n".join(f"- {intent}" for intent in selected_intents)
+    current_year = datetime.now().year
 
-    prompt = f"""Generate search queries based on these user intents.
+    prompt = f"""Today's date is {datetime.now().strftime('%B %Y')}. Use {current_year} for any current year references.
+
+Generate search queries based on these user intents.
 Generate 1-3 queries per intent depending on the intent's complexity and search variations.
 Each query should be a realistic phrase someone would type into an AI search engine.
 
