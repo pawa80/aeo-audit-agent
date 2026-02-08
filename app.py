@@ -13,6 +13,7 @@ from perplexity_checker import check_all_queries, get_citation_summary, Citation
 from recommender import generate_recommendations
 from intent_extractor import extract_intents
 from query_generator import generate_queries_from_intents
+from intent_scorer import calculate_intent_score
 
 
 def generate_claude_prompt(url, title, recommendations):
@@ -205,33 +206,11 @@ def display_results(result: AnalysisResult) -> None:
     with col2:
         st.metric("Total Word Count", f"{result.total_word_count:,}")
 
-    # Direct Answer Score
-    st.markdown("---")
-    st.subheader("Direct Answer Analysis")
-
-    col1, col2 = st.columns([1, 2])
-
-    with col1:
-        display_score_gauge(result.direct_answer_score)
-
-    with col2:
-        st.markdown("**Assessment Breakdown:**")
-        for reason in result.direct_answer_reasons:
-            if any(word in reason.lower() for word in ["good", "contains", "doesn't start with weak", "not promotional", "definitive"]):
-                st.markdown(f"- :white_check_mark: {reason}")
-            else:
-                st.markdown(f"- :warning: {reason}")
-
-    # First paragraph analysis
+    # First paragraph preview
     st.markdown("---")
     st.subheader("First Paragraph")
 
     if result.first_paragraph:
-        if result.has_direct_answer:
-            st.success("This paragraph appears to provide a direct answer!")
-        else:
-            st.warning("This paragraph may not be optimal for answer engines.")
-
         st.info(result.first_paragraph)
     else:
         st.warning("No substantial first paragraph found.")
@@ -502,6 +481,11 @@ def main():
         st.session_state.intent_validated = False
     if "regenerated_queries" not in st.session_state:
         st.session_state.regenerated_queries = []
+    # Intent-based scoring (calculated after intent selection)
+    if "intent_score" not in st.session_state:
+        st.session_state.intent_score = None
+    if "intent_score_breakdown" not in st.session_state:
+        st.session_state.intent_score_breakdown = None
 
     st.title("AEO AUDIT AGENT")
     st.caption("v0.3 | Answer Engine Optimization")
@@ -546,6 +530,8 @@ def main():
                 st.session_state.selected_intents = []
                 st.session_state.intent_validated = False
                 st.session_state.regenerated_queries = []
+                st.session_state.intent_score = None
+                st.session_state.intent_score_breakdown = None
 
                 # Extract intents if we have an API key and analysis succeeded
                 if result.extraction_success and openai_api_key:
@@ -573,17 +559,6 @@ def main():
             These are the phrases we detected that your page could be optimized for.
             **Select 3-6 intents** that best match what you want your page to rank for.
             """)
-
-            # Select All / Select None buttons
-            col1, col2, col3 = st.columns([1, 1, 4])
-            with col1:
-                if st.button("Select All", use_container_width=True):
-                    st.session_state.selected_intents = st.session_state.extracted_intents.copy()
-                    st.rerun()
-            with col2:
-                if st.button("Select None", use_container_width=True):
-                    st.session_state.selected_intents = []
-                    st.rerun()
 
             # Display checkboxes for each intent
             selected = []
@@ -616,6 +591,18 @@ def main():
                 )
 
             if confirm_button and 3 <= num_selected <= 6:
+                # Calculate intent-based relevance score
+                with st.spinner("Calculating relevance score for your selected intents..."):
+                    score_result = calculate_intent_score(
+                        full_content=result.full_content,
+                        title=result.title,
+                        first_paragraph=result.first_paragraph,
+                        selected_intents=st.session_state.selected_intents,
+                        api_key=openai_api_key
+                    )
+                    st.session_state.intent_score = score_result.get("total_score", 0)
+                    st.session_state.intent_score_breakdown = score_result
+
                 # Regenerate queries based on selected intents
                 with st.spinner("Generating queries based on your selected intents..."):
                     query_result = generate_queries_from_intents(
@@ -655,6 +642,48 @@ def main():
                     st.session_state.intent_validated = True
                     st.session_state.regenerated_queries = result.generated_queries
                     st.rerun()
+
+        # Intent Relevance Score (shown after intent validation)
+        if result.extraction_success and st.session_state.intent_validated and st.session_state.intent_score is not None:
+            st.markdown("---")
+            breakdown = st.session_state.intent_score_breakdown or {}
+            total_score = st.session_state.intent_score
+
+            st.subheader(f"Intent Relevance Score: {total_score}/100")
+
+            # Score breakdown
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Content Answers", f"{breakdown.get('content_presence_score', 0)}/60")
+            with col2:
+                st.metric("Answer Positioning", f"{breakdown.get('position_score', 0)}/20")
+            with col3:
+                st.metric("Supporting Structure", f"{breakdown.get('structure_score', 0)}/20")
+
+            # Intent-by-intent breakdown (expandable)
+            intent_breakdown = breakdown.get('intent_breakdown', [])
+            if intent_breakdown:
+                with st.expander("Intent-by-intent breakdown", expanded=False):
+                    for item in intent_breakdown:
+                        intent_text = item.get('intent', 'Unknown')
+                        present = item.get('present', False)
+                        position = item.get('position', 'missing')
+                        has_structure = item.get('has_structure', False)
+
+                        status_icon = "✅" if present else "❌"
+                        position_label = {
+                            'first_paragraph': '📍 First paragraph',
+                            'early': '📄 Early (first 500 words)',
+                            'buried': '📦 Buried (after 500 words)',
+                            'missing': '❓ Not found'
+                        }.get(position, position)
+                        structure_icon = "✅" if has_structure else "❌"
+
+                        st.markdown(f"**{status_icon} {intent_text}**")
+                        st.caption(f"Position: {position_label} | Structure: {structure_icon}")
+
+            if breakdown.get('error'):
+                st.warning(f"Scoring note: {breakdown['error']}")
 
         # Citation Check Section (only after intent validation)
         if result.extraction_success and st.session_state.intent_validated:
@@ -769,7 +798,7 @@ def main():
                                 title=result.title,
                                 full_content=result.full_content,
                                 first_paragraph=result.first_paragraph,
-                                direct_answer_score=result.direct_answer_score,
+                                direct_answer_score=st.session_state.intent_score or 0,
                                 citation_results=citation_dicts,
                                 selected_intents=st.session_state.get('selected_intents', []),
                                 api_key=openai_key
