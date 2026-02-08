@@ -153,10 +153,13 @@ def generate_recommendations(title, full_content, first_paragraph, direct_answer
 
 Analyze this page against the AEO methodology and provide a structured assessment.
 
+IMPORTANT: Each critical issue and action plan item MUST reference which specific user intent it affects.
+Use format: 'For intent "[intent name]": [issue description]'
+
 Respond ONLY with valid JSON in this exact format:
 {{
     "summary": "2-3 sentence assessment of the page's AEO readiness",
-    "critical_issues": ["Issue 1 that must be fixed", "Issue 2 if any"],
+    "critical_issues": ["For intent '[specific intent]': issue description", "For intent '[specific intent]': another issue"],
     "action_plan": [
         {{
             "priority": 1,
