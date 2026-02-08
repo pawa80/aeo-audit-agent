@@ -881,28 +881,29 @@ def main():
 
                             # PDF Report
                             st.markdown("### Download Full Report")
+                            st.info("📄 PDF export temporarily unavailable. Use 'Copy Prompt for Claude' instead.")
 
-                            # Convert citation results to dicts for PDF
-                            citation_dicts = None
-                            if st.session_state.get('citation_results'):
-                                citation_dicts = [
-                                    {'query': r.query, 'cited': r.cited}
-                                    for r in st.session_state.citation_results
-                                ]
-
-                            pdf_bytes = generate_pdf_report(
-                                url=st.session_state.analysis_result.url,
-                                title=st.session_state.analysis_result.title,
-                                recommendations=recommendations,
-                                citation_results=citation_dicts
-                            )
-
-                            st.download_button(
-                                label="📄 Download PDF Report",
-                                data=pdf_bytes,
-                                file_name=f"aeo-audit-{datetime.now().strftime('%Y%m%d-%H%M')}.pdf",
-                                mime="application/pdf"
-                            )
+                            # # Convert citation results to dicts for PDF
+                            # citation_dicts = None
+                            # if st.session_state.get('citation_results'):
+                            #     citation_dicts = [
+                            #         {'query': r.query, 'cited': r.cited}
+                            #         for r in st.session_state.citation_results
+                            #     ]
+                            #
+                            # pdf_bytes = generate_pdf_report(
+                            #     url=st.session_state.analysis_result.url,
+                            #     title=st.session_state.analysis_result.title,
+                            #     recommendations=recommendations,
+                            #     citation_results=citation_dicts
+                            # )
+                            #
+                            # st.download_button(
+                            #     label="📄 Download PDF Report",
+                            #     data=pdf_bytes,
+                            #     file_name=f"aeo-audit-{datetime.now().strftime('%Y%m%d-%H%M')}.pdf",
+                            #     mime="application/pdf"
+                            # )
 
                         else:
                             # Fallback for old format (list of strings)
