@@ -342,8 +342,8 @@ def analyze_url(url: str, openai_api_key: Optional[str] = None) -> AnalysisResul
     first_500 = get_first_n_words(full_text, 500)
     first_paragraph = paragraphs[0] if paragraphs else ""
 
-    # Check for direct answer
-    has_answer, answer_score, answer_reasons = check_direct_answer(first_paragraph)
+    # Note: Direct answer scoring removed - now calculated after intent selection
+    # via intent_scorer.py for intent-specific relevance scoring
 
     # Generate search queries (LLM if available, otherwise rule-based)
     queries, ai_generated = smart_generate_queries(
@@ -359,9 +359,9 @@ def analyze_url(url: str, openai_api_key: Optional[str] = None) -> AnalysisResul
         total_word_count=total_words,
         first_500_words=first_500,
         first_paragraph=first_paragraph,
-        has_direct_answer=has_answer,
-        direct_answer_score=answer_score,
-        direct_answer_reasons=answer_reasons,
+        has_direct_answer=False,  # Deprecated - use intent_scorer instead
+        direct_answer_score=0,    # Deprecated - use intent_scorer instead
+        direct_answer_reasons=[], # Deprecated - use intent_scorer instead
         extraction_success=True,
         headings=headings,
         generated_queries=queries,
