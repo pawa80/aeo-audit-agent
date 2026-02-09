@@ -156,6 +156,15 @@ Analyze this page against the AEO methodology and provide a structured assessmen
 IMPORTANT: Each critical issue and action plan item MUST reference which specific user intent it affects.
 Use format: 'For intent "[intent name]": [issue description]'
 
+CRITICAL INSTRUCTION FOR CRITICAL_ISSUES:
+You MUST start each critical issue with "For intent '[exact intent from list above]':".
+Do NOT use generic phrases like "the direct answer" or "the content".
+Every issue must name which specific user intent it affects.
+
+Example:
+- BAD: "Direct answer is buried within the first paragraph"
+- GOOD: "For intent 'What role does AI play in data infrastructure?': The answer is buried in paragraph 3, not the opening"
+
 Respond ONLY with valid JSON in this exact format:
 {{
     "summary": "2-3 sentence assessment of the page's AEO readiness",
