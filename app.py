@@ -486,6 +486,11 @@ def main():
         st.session_state.intent_score = None
     if "intent_score_breakdown" not in st.session_state:
         st.session_state.intent_score_breakdown = None
+    # Query review (before citation check)
+    if "selected_queries" not in st.session_state:
+        st.session_state.selected_queries = []
+    if "queries_confirmed" not in st.session_state:
+        st.session_state.queries_confirmed = False
 
     st.title("AEO AUDIT AGENT")
     st.caption("v0.3 | Answer Engine Optimization")
@@ -532,6 +537,8 @@ def main():
                 st.session_state.regenerated_queries = []
                 st.session_state.intent_score = None
                 st.session_state.intent_score_breakdown = None
+                st.session_state.selected_queries = []
+                st.session_state.queries_confirmed = False
 
                 # Extract intents if we have an API key and analysis succeeded
                 if result.extraction_success and openai_api_key:
@@ -690,12 +697,11 @@ def main():
             # Use regenerated queries if available, otherwise use original
             queries_to_use = st.session_state.regenerated_queries or result.generated_queries
 
-            if queries_to_use:
+            # Query Review Section (before citation check)
+            if queries_to_use and not st.session_state.queries_confirmed:
                 st.markdown("---")
-                st.subheader("Citation Check")
-                st.markdown("""
-                Test if Perplexity AI cites your page when answering these queries.
-                """)
+                st.subheader("Review Generated Queries")
+                st.markdown("These queries were generated from your selected intents. **Deselect any that aren't relevant** to your optimization goals.")
 
                 # Show selected intents if any
                 if st.session_state.selected_intents:
@@ -703,16 +709,53 @@ def main():
                         for intent in st.session_state.selected_intents:
                             st.markdown(f"- {intent}")
 
-                # Display generated queries
+                # Show query source
                 if st.session_state.regenerated_queries and st.session_state.selected_intents:
-                    st.markdown("**Generated Queries:** *(based on your selected intents)*")
+                    st.caption("*Queries generated based on your selected intents*")
                 elif result.queries_ai_generated:
-                    st.markdown("**Generated Queries:** *(AI-generated using GPT-4o-mini)*")
+                    st.caption("*AI-generated using GPT-4o-mini*")
                 else:
-                    st.markdown("**Generated Queries:** *(rule-based fallback)*")
+                    st.caption("*Rule-based fallback queries*")
 
-                for i, query in enumerate(queries_to_use, 1):
-                    st.markdown(f"{i}. {query}")
+                # Display checkboxes for each query (all selected by default)
+                selected_queries = []
+                for i, query in enumerate(queries_to_use):
+                    if st.checkbox(query, value=True, key=f"query_checkbox_{i}"):
+                        selected_queries.append(query)
+
+                num_queries_selected = len(selected_queries)
+
+                # Validation message
+                if num_queries_selected == 0:
+                    st.warning("Select at least 1 query to check citations. If none fit, go back and adjust your intent selection.")
+                else:
+                    st.success(f"Selected {num_queries_selected} queries for citation check")
+
+                # Confirm Queries button
+                col1, col2 = st.columns([1, 4])
+                with col1:
+                    confirm_queries_btn = st.button(
+                        f"Confirm {num_queries_selected} Queries",
+                        type="primary",
+                        disabled=num_queries_selected == 0,
+                        use_container_width=True
+                    )
+
+                if confirm_queries_btn and num_queries_selected > 0:
+                    st.session_state.selected_queries = selected_queries
+                    st.session_state.queries_confirmed = True
+                    st.rerun()
+
+            # Citation Check Section (only after queries confirmed)
+            if st.session_state.queries_confirmed and st.session_state.selected_queries:
+                st.markdown("---")
+                st.subheader("Citation Check")
+                st.markdown(f"Testing {len(st.session_state.selected_queries)} queries with Perplexity AI.")
+
+                # Show confirmed queries
+                with st.expander("Confirmed queries", expanded=False):
+                    for i, query in enumerate(st.session_state.selected_queries, 1):
+                        st.markdown(f"{i}. {query}")
 
                 # Check if API key is configured
                 api_key_available = False
@@ -743,7 +786,7 @@ def main():
                     with st.spinner("Checking citations with Perplexity AI..."):
                         api_key = st.secrets["PERPLEXITY_API_KEY"]
                         citation_results = check_all_queries(
-                            queries_to_use,
+                            st.session_state.selected_queries,
                             result.url,
                             api_key
                         )
