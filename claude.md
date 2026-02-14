@@ -105,10 +105,31 @@ Commit and push to main branch. Pushes to main auto-deploy to Streamlit Cloud.
 - `recommendations` - Recommendation dict
 
 ## Rolling Handover
-**Last session:** 14 Feb 2026 (pal-ops chat)
-- Implemented IDEA 1 from Three Power Ideas plan
-- Created intelligence feed module + data
-- Modified recommender to inject intelligence context
-- Applied v0.7 UI fixes (version, Perplexity copy, intent help text)
-- Safety: v0.6-stable tag pushed to remote
-- **Next:** Deploy (push to main), test on a page, compare v0.6 vs v0.7 recommendations
+**Last session:** 14 Feb 2026 (pal-ops chat — Search Intelligence Suite master dev)
+
+### Deployed to main (2 commits)
+1. **v0.7 Intelligence-fed recommendations** (commit 98cb774)
+   - `intelligence_feed.py` + `intelligence/current_feed.json` (30 weeks curated insights)
+   - `recommender.py` injects intelligence context + voice preservation instructions
+   - `app.py` v0.7 UI, "AI search engines" copy, intent help text
+2. **Dynamic AEO Guide from Notion** (commit b36d1aa)
+   - `intelligence/aeo_guide.md` — full AEO Guide (~4000 words, synced from Notion)
+   - `sync_aeo_guide.py` — fetches from Notion API, writes local file
+   - `recommender.py` loads guide from file, falls back to hardcoded `AEO_GUIDE`
+   - `intelligence_feed.py` added `get_aeo_guide()` loader
+
+### Backlogged
+- **Suite-level escalation signal**: When 0% citation rate, flag domain-level problem. Requires suite data. Noted in AEO Roadmap on Notion.
+
+### Sequencing plan (posted to Unified Dev Comms)
+- AEO to v1.0 (Supabase) → GEO to v3.0 (dynamic keywords) → Suite MVP (shared auth + handoff)
+
+### To update AEO Guide
+1. Edit Notion page: https://www.notion.so/2f49fa1ce4f5805dac3edce68f48be61
+2. Run `python sync_aeo_guide.py` (needs NOTION_API_KEY in env or .streamlit/secrets.toml)
+3. Commit + push to main
+
+### Next
+- Test v0.7 live, compare recommendations vs v0.6
+- Have Morten test on Fyresign page
+- v0.8: Show cited competitor URLs
