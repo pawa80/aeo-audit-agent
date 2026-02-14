@@ -12,6 +12,8 @@ from typing import Optional
 from openai import OpenAI
 import requests
 
+import intelligence_feed
+
 
 AEO_GUIDE = """
 # AEO OPTIMIZATION GUIDE
@@ -124,11 +126,33 @@ def generate_recommendations(title, full_content, first_paragraph, direct_answer
     # Truncate full_content to prevent token overflow (keep first 8000 chars)
     content_for_analysis = full_content[:8000] if full_content else ""
 
-    prompt = f"""You are an AEO (Answer Engine Optimization) expert. Analyze this page and provide specific, actionable recommendations.
+    # Load intelligence feed (returns empty string if missing — graceful fallback)
+    intelligence_context = intelligence_feed.get_current_feed()
+    feed_meta = intelligence_feed.get_feed_metadata()
+    feed_section = ""
+    if intelligence_context:
+        feed_weeks = feed_meta.get("weeks_of_data", 0)
+        feed_date = feed_meta.get("last_updated", "unknown")
+        feed_section = f"""
 
-## AEO METHODOLOGY REFERENCE
+## CURRENT INTELLIGENCE FEED (Updated {feed_date})
+Based on {feed_weeks} weeks of curated AI search industry analysis:
+
+{intelligence_context}
+
+IMPORTANT INSTRUCTIONS BASED ON INTELLIGENCE:
+- When making recommendations, reference current intelligence where relevant.
+- Instead of generic advice like "add FAQ schema", connect suggestions to specific trends and citation patterns above.
+- PRESERVE the page's distinctive voice — rewrite for AEO structure WITHOUT flattening personality or unique terminology.
+- Prioritise entity-rich, answer-first structure over superficial schema additions.
+- If suggesting text rewrites, keep the author's tone and perspective intact. Only restructure for clarity and AI extractability.
+"""
+
+    prompt = f"""You are an AEO (Answer Engine Optimization) expert with access to BOTH foundational methodology AND current intelligence from {feed_meta.get('weeks_of_data', 0)} weeks of curated industry analysis.
+
+## AEO METHODOLOGY REFERENCE (Foundational)
 {AEO_GUIDE}
-
+{feed_section}
 ## PAGE BEING ANALYZED
 
 **Title:** {title}
@@ -202,7 +226,7 @@ Focus on the MOST impactful changes first. Be specific - quote actual text from 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=2000,
+            max_tokens=3000,
             temperature=0.3
         )
 

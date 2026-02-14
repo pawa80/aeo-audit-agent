@@ -14,6 +14,7 @@ from recommender import generate_recommendations
 from intent_extractor import extract_intents
 from query_generator import generate_queries_from_intents
 from intent_scorer import calculate_intent_score
+from intelligence_feed import get_feed_metadata
 
 
 def generate_claude_prompt(url, title, recommendations):
@@ -493,7 +494,13 @@ def main():
         st.session_state.queries_confirmed = False
 
     st.title("AEO AUDIT AGENT")
-    st.caption("v0.3 | Answer Engine Optimization")
+
+    # Intelligence feed indicator
+    feed_meta = get_feed_metadata()
+    if feed_meta:
+        st.caption(f"v0.7 | Answer Engine Optimization | Intelligence Feed: {feed_meta.get('version', 'N/A')} ({feed_meta.get('last_updated', 'N/A')}) — {feed_meta.get('weeks_of_data', 0)} weeks of data")
+    else:
+        st.caption("v0.7 | Answer Engine Optimization")
 
     st.markdown("""
     Analyze web pages to see how well they're optimized for AI answer engines
@@ -565,6 +572,8 @@ def main():
             st.markdown("""
             These are the phrases we detected that your page could be optimized for.
             **Select 3-6 intents** that best match what you want your page to rank for.
+
+            *If none of these intents match your page's purpose, this may indicate a positioning problem — your page may not clearly communicate what it's about.*
             """)
 
             # Display checkboxes for each intent
@@ -750,7 +759,7 @@ def main():
             if st.session_state.queries_confirmed and st.session_state.selected_queries:
                 st.markdown("---")
                 st.subheader("Citation Check")
-                st.markdown(f"Testing {len(st.session_state.selected_queries)} queries with Perplexity AI.")
+                st.markdown(f"Testing {len(st.session_state.selected_queries)} queries with AI search engines.")
 
                 # Show confirmed queries
                 with st.expander("Confirmed queries", expanded=False):
@@ -783,7 +792,7 @@ def main():
                     )
 
                 if check_button and api_key_available:
-                    with st.spinner("Checking citations with Perplexity AI..."):
+                    with st.spinner("Checking citations with AI search engines..."):
                         api_key = st.secrets["PERPLEXITY_API_KEY"]
                         citation_results = check_all_queries(
                             st.session_state.selected_queries,
@@ -957,7 +966,7 @@ def main():
     st.markdown("---")
     st.markdown(
         "<div style='text-align: center; color: #666666; font-size: 12px; padding: 16px 0;'>"
-        "AEO Audit Agent v0.3 | Built for Answer Engine Optimization"
+        "AEO Audit Agent v0.7 | Intelligence-Fed Answer Engine Optimization"
         "</div>",
         unsafe_allow_html=True
     )

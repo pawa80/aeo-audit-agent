@@ -4,69 +4,71 @@
 A Streamlit-based tool that analyzes web pages for **Answer Engine Optimization (AEO)** - helping content rank better in AI search engines like ChatGPT, Perplexity, and Google AI Overviews.
 
 ## Current Version
-v0.3 - Intent Validation (with variable query generation fix)
+v0.7 - Intelligence-Fed Recommendations
+
+## What Changed in v0.7
+- **Intelligence Feed**: New `intelligence_feed.py` module loads curated insights from `intelligence/current_feed.json`
+- **Recommender upgraded**: `recommender.py` now injects 30 weeks of curated intelligence (trend alerts, counter-signals, citation patterns) into the GPT-4o-mini prompt alongside the static AEO_GUIDE
+- **Voice preservation**: Prompt explicitly instructs NOT to flatten distinctive voice into corporate speak
+- **Counter-signals**: Feed includes "DO NOT recommend" items (e.g., don't recommend FAQ schema as primary fix)
+- **UI fixes**: Version updated to v0.7, "Perplexity" removed from UI copy, help text added for intent mismatch
+- **Graceful fallback**: If `intelligence/current_feed.json` is missing, agent works exactly as v0.6
 
 ## Architecture
 ```
 ├── app.py                 # Streamlit UI and main application flow
 ├── analyzer.py            # Content extraction & analysis (BeautifulSoup)
+├── intelligence_feed.py   # NEW: Loads curated intelligence from JSON feed
+├── intelligence/
+│   └── current_feed.json  # NEW: Curated intelligence data (updated weekly)
 ├── intent_extractor.py    # User intent extraction using GPT-4o-mini
 ├── query_generator.py     # LLM-based query generation (1-3 per intent)
 ├── perplexity_checker.py  # Citation checking via Perplexity API
-├── recommender.py         # AI-powered recommendations
+├── recommender.py         # AI-powered recommendations (now intelligence-fed)
 └── requirements.txt       # Dependencies
 ```
 
-## UX Flow (v0.3)
+## Intelligence Feed
+The intelligence feed (`intelligence/current_feed.json`) contains:
+- **trend_alerts**: Current AI search trends with confidence levels
+- **evolving_patterns**: Multi-week patterns with first_seen/latest_signal dates
+- **counter_signals**: Things NOT to recommend (conventional wisdom that's now outdated)
+- **citation_patterns**: Evidence-based patterns from GEO Tracker data (745 records)
+
+To update: Edit `intelligence/current_feed.json` with new insights after each newsletter analysis. The feed version and date display in the UI header.
+
+## UX Flow (v0.7)
 
 1. **URL Input** → User enters URL and clicks "Analyze"
-2. **Analysis Results** → Shows: Page info, Direct Answer Score (0-100), first paragraph, content preview
+2. **Analysis Results** → Shows: Page info, first paragraph, content preview
 3. **Intent Validation** → Shows 10 extracted intents as checkboxes
    - User selects 3-6 intents
-   - "Select All" / "Select None" buttons available
-   - Validation prevents <3 or >6 selections
+   - Help text: if no intents match, may indicate positioning problem
    - "Confirm Intents" button to proceed
-4. **Citation Check** → Queries generated based on selected intents (1-3 per intent)
-   - "Check Citations" button → Perplexity API call
-   - Shows citation rate and competing sources
-5. **Recommendations** → "Get Recommendations" button → 3 actionable improvement suggestions
+4. **Intent Relevance Score** → 0-100 with breakdown (Content /60, Position /20, Structure /20)
+5. **Query Review** → User can deselect irrelevant queries before citation check
+6. **Citation Check** → Queries checked against AI search engines (Perplexity API)
+7. **Recommendations** → Intelligence-fed recommendations with trend references, voice preservation
 
 ## Key Modules
 
-### analyzer.py
-- `AnalysisResult` dataclass with all analysis data including headings
-- `fetch_page_content()` - HTTP fetch with User-Agent
-- `extract_text_content()` - Returns (full_text, title, paragraphs, headings)
-- `check_direct_answer()` - Scores first paragraph (0-100)
-- `smart_generate_queries()` - LLM with rule-based fallback
-- `analyze_url()` - Main entry point
+### intelligence_feed.py (NEW)
+- `load_feed()` - Loads JSON feed, returns None if missing
+- `get_feed_metadata()` - Returns version/date/weeks for UI display
+- `get_current_feed()` - Formats feed as prompt-ready markdown string
 
-### intent_extractor.py
-- `IntentExtractionResult` dataclass
-- `extract_intents()` - Returns 10 user intents using GPT-4o-mini
-- Prompt focuses on business intent + user intent phrases
-- Extra weight on title, first paragraph, first 200 words
+### recommender.py (MODIFIED)
+- Now imports `intelligence_feed`
+- `generate_recommendations()` injects intelligence context after AEO_GUIDE
+- max_tokens increased to 3000 to accommodate larger prompt
+- Prompt instructs to reference intelligence, preserve voice, avoid generic advice
 
-### query_generator.py
-- `QueryGenerationResult` dataclass
-- `generate_queries_with_llm()` - General query generation (3 queries)
-- `generate_queries_from_intents()` - Generates 1-3 queries per selected intent
-  - 3 intents → 3-9 queries
-  - 6 intents → 6-18 queries
-  - max_tokens=300 to accommodate larger output
-- `get_fallback_queries()` - Rule-based fallback
-
-### perplexity_checker.py
-- `CitationResult` dataclass
-- `check_citation()` - Single query check
-- `check_all_queries()` - Batch check
-- `get_citation_summary()` - Aggregated stats
-
-### recommender.py
-- `RecommendationResult` dataclass
-- `generate_recommendations()` - Returns 3 actionable recommendations
-- Accepts headings for structure-aware recommendations
-- Context includes citation results
+### app.py (MODIFIED)
+- Imports `get_feed_metadata` for UI indicator
+- Header shows intelligence feed version and date
+- Version bumped to v0.7
+- "Perplexity" removed from UI copy → "AI search engines"
+- Help text added for intent validation
 
 ## Configuration
 `.streamlit/secrets.toml`:
@@ -78,31 +80,35 @@ PERPLEXITY_API_KEY = "pplx-..."  # For citation checking
 ## Git Workflow
 Commit and push to main branch. Pushes to main auto-deploy to Streamlit Cloud.
 
+## Safety
+- `v0.6-stable` tag on the commit before intelligence feed changes
+- Intelligence feed is additive — removing the JSON file reverts to v0.6 behaviour
+
+## Suite Context
+- Part of Search Intelligence Suite (AEO Agent + GEO Tracker + Crawler)
+- Supabase project exists: `dxduneaizaxnynsmsvbx.supabase.co`
+- Identity layer already built by GEO Tracker
+- When AEO Agent adds persistence (~v1.0): add `aeo_scores`, `aeo_recommendations` tables
+- See Unified Dev Comms Notion page for cross-tool coordination
+
 ## Session State Variables
 - `analysis_result` - AnalysisResult from analyzer
 - `extracted_intents` - List of 10 intents from GPT
 - `selected_intents` - List of 3-6 user-confirmed intents
 - `intent_validated` - Boolean flag
+- `intent_score` - 0-100 relevance score
+- `intent_score_breakdown` - Detailed scoring breakdown
 - `regenerated_queries` - Queries based on selected intents (1-3 per intent)
+- `selected_queries` - User-confirmed queries for citation check
+- `queries_confirmed` - Boolean flag
 - `citation_results` - List of CitationResult
-- `recommendations` - RecommendationResult
+- `recommendations` - Recommendation dict
 
-## Query Generation from Intents Prompt
-```
-Generate search queries based on these user intents.
-Generate 1-3 queries per intent depending on the intent's complexity and search variations.
-Each query should be a realistic phrase someone would type into an AI search engine.
-```
-
-## Graceful Fallbacks
-- No OpenAI key: Skip intent extraction, show "Skip Intent Validation" button
-- Intent extraction fails: Allow skipping, use original queries
-- Query regeneration fails: Use original queries with warning
-- No Perplexity key: Disable citation check button with info message
-
-## Key Design Decisions
-- Separate buttons for Analyze vs Citation Check (controls API costs)
-- Session state preserves results between interactions
-- Graceful fallbacks when API keys unavailable
-- Headings extracted for structure-aware recommendations
-- Variable query count (1-3 per intent) instead of fixed 3 total
+## Rolling Handover
+**Last session:** 14 Feb 2026 (pal-ops chat)
+- Implemented IDEA 1 from Three Power Ideas plan
+- Created intelligence feed module + data
+- Modified recommender to inject intelligence context
+- Applied v0.7 UI fixes (version, Perplexity copy, intent help text)
+- Safety: v0.6-stable tag pushed to remote
+- **Next:** Deploy (push to main), test on a page, compare v0.6 vs v0.7 recommendations
