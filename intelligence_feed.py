@@ -12,6 +12,7 @@ import os
 
 
 FEED_PATH = os.path.join(os.path.dirname(__file__), "intelligence", "current_feed.json")
+AEO_GUIDE_PATH = os.path.join(os.path.dirname(__file__), "intelligence", "aeo_guide.md")
 
 
 def load_feed() -> dict | None:
@@ -93,3 +94,16 @@ def get_current_feed() -> str:
             )
 
     return "\n".join(sections)
+
+
+def get_aeo_guide() -> str | None:
+    """Load the AEO Guide from the synced markdown file.
+
+    Returns None if the file doesn't exist, signalling the caller
+    should fall back to the hardcoded AEO_GUIDE constant.
+    """
+    try:
+        with open(AEO_GUIDE_PATH, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return None

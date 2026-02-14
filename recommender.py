@@ -126,6 +126,9 @@ def generate_recommendations(title, full_content, first_paragraph, direct_answer
     # Truncate full_content to prevent token overflow (keep first 8000 chars)
     content_for_analysis = full_content[:8000] if full_content else ""
 
+    # Load AEO Guide: prefer Notion-synced file, fall back to hardcoded constant
+    aeo_guide_content = intelligence_feed.get_aeo_guide() or AEO_GUIDE
+
     # Load intelligence feed (returns empty string if missing — graceful fallback)
     intelligence_context = intelligence_feed.get_current_feed()
     feed_meta = intelligence_feed.get_feed_metadata()
@@ -151,7 +154,7 @@ IMPORTANT INSTRUCTIONS BASED ON INTELLIGENCE:
     prompt = f"""You are an AEO (Answer Engine Optimization) expert with access to BOTH foundational methodology AND current intelligence from {feed_meta.get('weeks_of_data', 0)} weeks of curated industry analysis.
 
 ## AEO METHODOLOGY REFERENCE (Foundational)
-{AEO_GUIDE}
+{aeo_guide_content}
 {feed_section}
 ## PAGE BEING ANALYZED
 
