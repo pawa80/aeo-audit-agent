@@ -114,7 +114,12 @@ class RecommendationResult:
 
 
 def generate_recommendations(title, full_content, first_paragraph, direct_answer_score, citation_results, selected_intents, api_key):
-    """Generate expert-grounded AEO recommendations with structured output."""
+    """Generate intelligence-first AEO recommendations with structured output.
+
+    v0.8: Intelligence items are an explicit evaluation checklist — each one
+    gets a verdict (APPLIES/NOT_APPLICABLE/RESPECTED). Recommendations must
+    cite their intelligence source.
+    """
 
     client = OpenAI(api_key=api_key)
 
@@ -129,33 +134,42 @@ def generate_recommendations(title, full_content, first_paragraph, direct_answer
     # Load AEO Guide: prefer Notion-synced file, fall back to hardcoded constant
     aeo_guide_content = intelligence_feed.get_aeo_guide() or AEO_GUIDE
 
-    # Load intelligence feed (returns empty string if missing — graceful fallback)
-    intelligence_context = intelligence_feed.get_current_feed()
+    # Load intelligence checklist (returns empty string if missing — graceful fallback)
+    intelligence_checklist = intelligence_feed.get_checklist_prompt()
     feed_meta = intelligence_feed.get_feed_metadata()
-    feed_section = ""
-    if intelligence_context:
-        feed_weeks = feed_meta.get("weeks_of_data", 0)
-        feed_date = feed_meta.get("last_updated", "unknown")
-        feed_section = f"""
+    feed_weeks = feed_meta.get("weeks_of_data", 0)
+    feed_date = feed_meta.get("last_updated", "unknown")
 
-## CURRENT INTELLIGENCE FEED (Updated {feed_date})
-Based on {feed_weeks} weeks of curated AI search industry analysis:
+    # Build the intelligence evaluation section
+    intelligence_section = ""
+    if intelligence_checklist:
+        intelligence_section = f"""
 
-{intelligence_context}
+## INTELLIGENCE EVALUATION CHECKLIST ({feed_weeks} weeks of curated data, updated {feed_date})
 
-IMPORTANT INSTRUCTIONS BASED ON INTELLIGENCE:
-- When making recommendations, reference current intelligence where relevant.
-- Instead of generic advice like "add FAQ schema", connect suggestions to specific trends and citation patterns above.
-- PRESERVE the page's distinctive voice — rewrite for AEO structure WITHOUT flattening personality or unique terminology.
-- Prioritise entity-rich, answer-first structure over superficial schema additions.
-- If suggesting text rewrites, keep the author's tone and perspective intact. Only restructure for clarity and AI extractability.
+You MUST evaluate EVERY intelligence item below against the page. For each item, determine:
+- APPLIES: This intelligence is relevant and the page needs changes based on it
+- NOT_APPLICABLE: This intelligence doesn't apply to this page (explain briefly why)
+- RESPECTED: For counter-signals only — confirms you are NOT making this mistake
+
+{intelligence_checklist}
+
+CRITICAL RULES:
+1. You MUST include ALL intelligence items in your "intelligence_applied" output array with a verdict for each.
+2. Every action_plan item MUST have an "intelligence_source" field citing which intelligence item or AEO principle drives it.
+3. If a counter-signal says "DO NOT recommend X", check your recommendations — if any recommend X, remove them and replace with the alternative.
+4. PRESERVE the page's distinctive voice in all suggested rewrites. Do NOT flatten personality into corporate speak.
 """
 
-    prompt = f"""You are an AEO (Answer Engine Optimization) expert with access to BOTH foundational methodology AND current intelligence from {feed_meta.get('weeks_of_data', 0)} weeks of curated industry analysis.
+    prompt = f"""You are an AEO (Answer Engine Optimization) expert. You have TWO sources of knowledge:
+1. Foundational AEO methodology (timeless principles)
+2. A live intelligence feed from {feed_weeks} weeks of curated AI search industry analysis (current trends)
+
+Your recommendations MUST be driven by specific intelligence items, not generic best practices.
 
 ## AEO METHODOLOGY REFERENCE (Foundational)
 {aeo_guide_content}
-{feed_section}
+{intelligence_section}
 ## PAGE BEING ANALYZED
 
 **Title:** {title}
@@ -178,36 +192,39 @@ IMPORTANT INSTRUCTIONS BASED ON INTELLIGENCE:
 
 ## YOUR TASK
 
-Analyze this page against the AEO methodology and provide a structured assessment.
+1. First, evaluate EVERY intelligence item against this page (see checklist above).
+2. Then, generate recommendations that are DRIVEN BY the intelligence evaluation.
+3. Each recommendation must cite its intelligence source.
 
 IMPORTANT: Each critical issue and action plan item MUST reference which specific user intent it affects.
 Use format: 'For intent "[intent name]": [issue description]'
 
-CRITICAL INSTRUCTION FOR CRITICAL_ISSUES:
-You MUST start each critical issue with "For intent '[exact intent from list above]':".
-Do NOT use generic phrases like "the direct answer" or "the content".
-Every issue must name which specific user intent it affects.
-
-Example:
-- BAD: "Direct answer is buried within the first paragraph"
-- GOOD: "For intent 'What role does AI play in data infrastructure?': The answer is buried in paragraph 3, not the opening"
-
 Respond ONLY with valid JSON in this exact format:
 {{
-    "summary": "2-3 sentence assessment of the page's AEO readiness",
-    "critical_issues": ["For intent '[specific intent]': issue description", "For intent '[specific intent]': another issue"],
+    "summary": "2-3 sentence assessment referencing specific intelligence findings",
+    "intelligence_applied": [
+        {{
+            "item": "Short name of the intelligence item",
+            "type": "trend_alert|evolving_pattern|counter_signal|citation_pattern",
+            "verdict": "APPLIES|NOT_APPLICABLE|RESPECTED",
+            "impact": "How this intelligence item specifically affects this page (1-2 sentences)"
+        }}
+    ],
+    "critical_issues": ["For intent '[specific intent]': issue description driven by intelligence finding"],
     "action_plan": [
         {{
             "priority": 1,
             "action": "Specific action to take",
-            "reason": "Why this matters for AEO",
+            "reason": "Why this matters — referencing the intelligence source",
+            "intelligence_source": "Name of the intelligence item or AEO principle driving this",
             "current_text": "Quote the problematic text from the page",
-            "suggested_text": "Rewritten version following AEO principles"
+            "suggested_text": "Rewritten version that preserves the page's voice while improving AEO structure"
         }},
         {{
             "priority": 2,
             "action": "Second action",
             "reason": "Why this matters",
+            "intelligence_source": "Intelligence item or principle",
             "current_text": "Current text",
             "suggested_text": "Improved text"
         }},
@@ -215,6 +232,7 @@ Respond ONLY with valid JSON in this exact format:
             "priority": 3,
             "action": "Third action",
             "reason": "Why this matters",
+            "intelligence_source": "Intelligence item or principle",
             "current_text": "Current text if applicable",
             "suggested_text": "Improved text if applicable"
         }}
@@ -222,14 +240,15 @@ Respond ONLY with valid JSON in this exact format:
     "quick_wins": ["Easy change 1", "Easy change 2", "Easy change 3"]
 }}
 
-Focus on the MOST impactful changes first. Be specific - quote actual text from the page and provide concrete rewrites. Reference the AEO methodology principles in your reasoning.
+The intelligence_applied array MUST contain one entry for EVERY intelligence item in the checklist. Do not skip any.
+Focus on the MOST impactful changes first. Be specific — quote actual text and provide concrete rewrites.
 """
 
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=3000,
+            max_tokens=4000,
             temperature=0.3
         )
 
@@ -247,6 +266,7 @@ Focus on the MOST impactful changes first. Be specific - quote actual text from 
     except json.JSONDecodeError as e:
         return {
             "summary": "Unable to parse recommendations. Please try again.",
+            "intelligence_applied": [],
             "critical_issues": [],
             "action_plan": [],
             "quick_wins": []
@@ -254,6 +274,7 @@ Focus on the MOST impactful changes first. Be specific - quote actual text from 
     except Exception as e:
         return {
             "summary": f"Error generating recommendations: {str(e)}",
+            "intelligence_applied": [],
             "critical_issues": [],
             "action_plan": [],
             "quick_wins": []

@@ -96,6 +96,66 @@ def get_current_feed() -> str:
     return "\n".join(sections)
 
 
+def get_checklist_prompt() -> str:
+    """Format intelligence items as an evaluatable checklist for the model.
+
+    Each item becomes an explicit question the model must answer with a verdict.
+    Returns empty string if feed is missing.
+    """
+    feed = load_feed()
+    if not feed:
+        return ""
+
+    items = []
+    item_num = 0
+
+    for alert in feed.get("trend_alerts", []):
+        item_num += 1
+        confidence = alert.get("confidence", "medium").upper()
+        items.append(
+            f"INTELLIGENCE ITEM {item_num} [TREND ALERT — {confidence}]: "
+            f"{alert['insight']}\n"
+            f"  Implication: {alert.get('implication', '')}\n"
+            f"  Source: {alert.get('source', 'N/A')}\n"
+            f"  → Evaluate: Does this trend apply to the page being analyzed? "
+            f"If YES, what specific change should be made?"
+        )
+
+    for p in feed.get("evolving_patterns", []):
+        item_num += 1
+        items.append(
+            f"INTELLIGENCE ITEM {item_num} [EVOLVING PATTERN]: "
+            f"{p['pattern']}\n"
+            f"  Latest signal: {p.get('latest_signal', 'N/A')}\n"
+            f"  Recommendation impact: {p.get('recommendation_impact', '')}\n"
+            f"  → Evaluate: Does this pattern apply to the page? "
+            f"If YES, what specific change should be made?"
+        )
+
+    for c in feed.get("counter_signals", []):
+        item_num += 1
+        items.append(
+            f"INTELLIGENCE ITEM {item_num} [COUNTER-SIGNAL — DO NOT RECOMMEND]: "
+            f"{c['conventional_wisdom']}\n"
+            f"  Reality: {c['actual_signal']}\n"
+            f"  Instead: {c.get('action', '')}\n"
+            f"  → Evaluate: Were you about to recommend this conventional wisdom? "
+            f"If so, STOP and recommend the alternative instead."
+        )
+
+    for cp in feed.get("citation_patterns", []):
+        item_num += 1
+        items.append(
+            f"INTELLIGENCE ITEM {item_num} [CITATION PATTERN — EVIDENCE-BASED]: "
+            f"{cp['observation']}\n"
+            f"  Data: {cp.get('quantified', 'N/A')} ({cp.get('source', 'N/A')})\n"
+            f"  → Evaluate: Does the page follow this citation pattern? "
+            f"If NOT, what specific change would align it?"
+        )
+
+    return "\n\n".join(items)
+
+
 def get_aeo_guide() -> str | None:
     """Load the AEO Guide from the synced markdown file.
 

@@ -498,9 +498,9 @@ def main():
     # Intelligence feed indicator
     feed_meta = get_feed_metadata()
     if feed_meta:
-        st.caption(f"v0.7 | Answer Engine Optimization | Intelligence Feed: {feed_meta.get('version', 'N/A')} ({feed_meta.get('last_updated', 'N/A')}) — {feed_meta.get('weeks_of_data', 0)} weeks of data")
+        st.caption(f"v0.8 | Intelligence-First AEO | Feed: {feed_meta.get('version', 'N/A')} ({feed_meta.get('last_updated', 'N/A')}) — {feed_meta.get('weeks_of_data', 0)} weeks of data")
     else:
-        st.caption("v0.7 | Answer Engine Optimization")
+        st.caption("v0.8 | Answer Engine Optimization")
 
     st.markdown("""
     Analyze web pages to see how well they're optimized for AI answer engines
@@ -866,6 +866,33 @@ def main():
                             if recommendations.get('summary'):
                                 st.info(f"**Assessment:** {recommendations['summary']}")
 
+                            # Intelligence Analysis Panel
+                            intel_items = recommendations.get('intelligence_applied', [])
+                            if intel_items:
+                                st.subheader("📡 Intelligence Analysis")
+                                feed_meta_display = get_feed_metadata()
+                                weeks = feed_meta_display.get('weeks_of_data', 0)
+                                st.caption(f"Based on {weeks} weeks of curated AI search industry data")
+
+                                applies_items = [i for i in intel_items if i.get('verdict') == 'APPLIES']
+                                respected_items = [i for i in intel_items if i.get('verdict') == 'RESPECTED']
+                                na_items = [i for i in intel_items if i.get('verdict') == 'NOT_APPLICABLE']
+
+                                if applies_items:
+                                    for item in applies_items:
+                                        item_type = item.get('type', '').replace('_', ' ').upper()
+                                        st.error(f"**APPLIES** [{item_type}]: {item.get('item', '')}\n\n{item.get('impact', '')}")
+
+                                if respected_items:
+                                    for item in respected_items:
+                                        st.success(f"**RESPECTED** [COUNTER-SIGNAL]: {item.get('item', '')}\n\n{item.get('impact', '')}")
+
+                                if na_items:
+                                    with st.expander(f"{len(na_items)} intelligence items not applicable to this page"):
+                                        for item in na_items:
+                                            item_type = item.get('type', '').replace('_', ' ').upper()
+                                            st.caption(f"[{item_type}] {item.get('item', '')} — {item.get('impact', '')}")
+
                             # Critical Issues
                             if recommendations.get('critical_issues'):
                                 st.subheader("🚨 Critical Issues")
@@ -877,6 +904,8 @@ def main():
                                 st.subheader("📋 Action Plan")
                                 for item in recommendations['action_plan']:
                                     with st.expander(f"Priority {item.get('priority', '?')}: {item.get('action', 'Action')}", expanded=True):
+                                        if item.get('intelligence_source'):
+                                            st.markdown(f"**Intelligence source:** {item['intelligence_source']}")
                                         st.markdown(f"**Why:** {item.get('reason', '')}")
 
                                         col1, col2 = st.columns(2)
@@ -966,7 +995,7 @@ def main():
     st.markdown("---")
     st.markdown(
         "<div style='text-align: center; color: #666666; font-size: 12px; padding: 16px 0;'>"
-        "AEO Audit Agent v0.7 | Intelligence-Fed Answer Engine Optimization"
+        "AEO Audit Agent v0.8 | Intelligence-First Answer Engine Optimization"
         "</div>",
         unsafe_allow_html=True
     )
