@@ -124,6 +124,11 @@ Commit and push to main branch. Pushes to main auto-deploy to Streamlit Cloud.
    - `intelligence_feed.py` added `get_checklist_prompt()` — 13 items as evaluatable checklist
    - `recommender.py` restructured: intelligence-first prompt, `intelligence_applied` array, `intelligence_source` per action
    - `app.py` Intelligence Analysis panel, version v0.8
+4. **PDF report download fixed** (commit 612609b) — 15 Feb
+   - Uncommented PDF download button (disabled since v0.3)
+   - Added intelligence sections to PDF (verdicts, sources)
+   - Hardened `sanitize_for_pdf` for GPT output (arrows, emoji, checkmarks)
+   - Wrapped in try/except — degrades gracefully if exotic chars slip through
 
 ### Backlogged
 - **Suite-level escalation signal**: When 0% citation rate, flag domain-level problem. Requires suite data. Noted in AEO Roadmap on Notion.
