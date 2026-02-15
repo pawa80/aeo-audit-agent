@@ -69,16 +69,25 @@ def sanitize_for_pdf(text):
         'ä': 'a', 'Ä': 'A',
         'ü': 'u', 'Ü': 'U',
         'ß': 'ss',
-        '"': '"', '"': '"',
-        ''': "'", ''': "'",
-        '–': '-', '—': '-',
-        '…': '...',
-        '•': '*',
+        '\u201c': '"', '\u201d': '"',
+        '\u2018': "'", '\u2019': "'",
+        '\u2013': '-', '\u2014': '-',
+        '\u2026': '...',
+        '\u2022': '*',
+        '\u2192': '->',
+        '\u2713': '[Y]', '\u2714': '[Y]',
+        '\u2717': '[N]', '\u2718': '[N]',
+        '\u2705': '[Y]', '\u274c': '[N]',
+        '\u26a0': '[!]',
+        '\U0001f4e1': '[INTEL]',
+        '\U0001f6a8': '[!]',
+        '\U0001f4cb': '[PLAN]',
+        '\u26a1': '[QUICK]',
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
     # Remove any remaining non-Latin-1 characters
-    return text.encode('latin-1', errors='ignore').decode('latin-1')
+    return text.encode('latin-1', errors='replace').decode('latin-1')
 
 
 def generate_pdf_report(url, title, recommendations, citation_results=None):
@@ -121,6 +130,43 @@ def generate_pdf_report(url, title, recommendations, citation_results=None):
         pdf.multi_cell(0, 6, sanitize_for_pdf(recommendations['summary']))
         pdf.ln(5)
 
+    # Intelligence Analysis
+    intel_items = recommendations.get('intelligence_applied', [])
+    if intel_items:
+        pdf.set_font('Helvetica', 'B', 14)
+        pdf.cell(0, 10, 'Intelligence Analysis', ln=True)
+        pdf.set_font('Helvetica', '', 9)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(0, 5, 'Based on 30 weeks of curated AI search industry data', ln=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(3)
+
+        for item in intel_items:
+            verdict = item.get('verdict', 'UNKNOWN')
+            item_type = item.get('type', '').replace('_', ' ').upper()
+            item_name = sanitize_for_pdf(item.get('item', ''))
+            impact = sanitize_for_pdf(item.get('impact', ''))
+
+            if verdict == 'APPLIES':
+                pdf.set_font('Helvetica', 'B', 10)
+                pdf.set_text_color(200, 50, 50)
+                pdf.multi_cell(0, 5, f'APPLIES [{item_type}]: {item_name}')
+            elif verdict == 'RESPECTED':
+                pdf.set_font('Helvetica', 'B', 10)
+                pdf.set_text_color(50, 150, 50)
+                pdf.multi_cell(0, 5, f'RESPECTED [COUNTER-SIGNAL]: {item_name}')
+            else:
+                pdf.set_font('Helvetica', '', 10)
+                pdf.set_text_color(150, 150, 150)
+                pdf.multi_cell(0, 5, f'N/A [{item_type}]: {item_name}')
+
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font('Helvetica', '', 9)
+            pdf.multi_cell(0, 4, f'  {impact}')
+            pdf.ln(2)
+
+        pdf.ln(3)
+
     # Critical Issues
     if recommendations.get('critical_issues'):
         pdf.set_font('Helvetica', 'B', 14)
@@ -138,6 +184,12 @@ def generate_pdf_report(url, title, recommendations, citation_results=None):
         for item in recommendations['action_plan']:
             pdf.set_font('Helvetica', 'B', 12)
             pdf.multi_cell(0, 6, f"Priority {item.get('priority', '?')}: {sanitize_for_pdf(item.get('action', ''))}")
+
+            if item.get('intelligence_source'):
+                pdf.set_font('Helvetica', '', 9)
+                pdf.set_text_color(100, 100, 100)
+                pdf.multi_cell(0, 4, f"Intelligence source: {sanitize_for_pdf(item['intelligence_source'])}")
+                pdf.set_text_color(0, 0, 0)
 
             pdf.set_font('Helvetica', 'I', 10)
             pdf.multi_cell(0, 5, f"Why: {sanitize_for_pdf(item.get('reason', ''))}")
@@ -962,29 +1014,30 @@ def main():
 
                             # PDF Report
                             st.markdown("### Download Full Report")
-                            st.info("📄 PDF export temporarily unavailable. Use 'Copy Prompt for Claude' instead.")
 
-                            # # Convert citation results to dicts for PDF
-                            # citation_dicts = None
-                            # if st.session_state.get('citation_results'):
-                            #     citation_dicts = [
-                            #         {'query': r.query, 'cited': r.cited}
-                            #         for r in st.session_state.citation_results
-                            #     ]
-                            #
-                            # pdf_bytes = generate_pdf_report(
-                            #     url=st.session_state.analysis_result.url,
-                            #     title=st.session_state.analysis_result.title,
-                            #     recommendations=recommendations,
-                            #     citation_results=citation_dicts
-                            # )
-                            #
-                            # st.download_button(
-                            #     label="📄 Download PDF Report",
-                            #     data=pdf_bytes,
-                            #     file_name=f"aeo-audit-{datetime.now().strftime('%Y%m%d-%H%M')}.pdf",
-                            #     mime="application/pdf"
-                            # )
+                            citation_dicts = None
+                            if st.session_state.get('citation_results'):
+                                citation_dicts = [
+                                    {'query': r.query, 'cited': r.cited}
+                                    for r in st.session_state.citation_results
+                                ]
+
+                            try:
+                                pdf_bytes = generate_pdf_report(
+                                    url=st.session_state.analysis_result.url,
+                                    title=st.session_state.analysis_result.title,
+                                    recommendations=recommendations,
+                                    citation_results=citation_dicts
+                                )
+
+                                st.download_button(
+                                    label="📄 Download PDF Report",
+                                    data=pdf_bytes,
+                                    file_name=f"aeo-audit-{datetime.now().strftime('%Y%m%d-%H%M')}.pdf",
+                                    mime="application/pdf"
+                                )
+                            except Exception as e:
+                                st.warning(f"PDF generation failed: {e}. Use 'Download Prompt as Text' instead.")
 
                         else:
                             # Fallback for old format (list of strings)
