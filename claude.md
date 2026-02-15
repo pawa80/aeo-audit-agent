@@ -4,7 +4,15 @@
 A Streamlit-based tool that analyzes web pages for **Answer Engine Optimization (AEO)** - helping content rank better in AI search engines like ChatGPT, Perplexity, and Google AI Overviews.
 
 ## Current Version
-v0.7 - Intelligence-Fed Recommendations
+v0.8 - Intelligence-First Recommendations
+
+## What Changed in v0.8
+- **Intelligence-first architecture**: Intelligence items are now an explicit evaluation checklist — the model MUST evaluate every item against the page and return a verdict (APPLIES/NOT_APPLICABLE/RESPECTED)
+- **New `intelligence_applied` output**: JSON response includes top-level array showing which intelligence items were used and how
+- **`intelligence_source` per action**: Every action plan item must cite which intelligence item or AEO principle drives it
+- **UI: Intelligence Analysis panel**: Visible section showing applied intelligence (red), respected counter-signals (green), and non-applicable items (collapsed)
+- **`get_checklist_prompt()`**: New function in `intelligence_feed.py` formats intelligence items as evaluatable checklist
+- **max_tokens 3000→4000**: Accommodates richer structured output
 
 ## What Changed in v0.7
 - **Intelligence Feed**: New `intelligence_feed.py` module loads curated insights from `intelligence/current_feed.json`
@@ -48,27 +56,29 @@ To update: Edit `intelligence/current_feed.json` with new insights after each ne
 4. **Intent Relevance Score** → 0-100 with breakdown (Content /60, Position /20, Structure /20)
 5. **Query Review** → User can deselect irrelevant queries before citation check
 6. **Citation Check** → Queries checked against AI search engines (Perplexity API)
-7. **Recommendations** → Intelligence-fed recommendations with trend references, voice preservation
+7. **Intelligence Analysis** → Panel showing which intelligence items apply, counter-signals respected, N/A items
+8. **Recommendations** → Intelligence-driven recommendations with explicit intelligence sources per action
 
 ## Key Modules
 
-### intelligence_feed.py (NEW)
+### intelligence_feed.py
 - `load_feed()` - Loads JSON feed, returns None if missing
 - `get_feed_metadata()` - Returns version/date/weeks for UI display
-- `get_current_feed()` - Formats feed as prompt-ready markdown string
+- `get_current_feed()` - Formats feed as prompt-ready markdown string (v0.7, still used as fallback)
+- `get_checklist_prompt()` - **v0.8**: Formats intelligence items as evaluatable checklist with verdicts
+- `get_aeo_guide()` - Loads Notion-synced AEO Guide from markdown file
 
-### recommender.py (MODIFIED)
-- Now imports `intelligence_feed`
-- `generate_recommendations()` injects intelligence context after AEO_GUIDE
-- max_tokens increased to 3000 to accommodate larger prompt
-- Prompt instructs to reference intelligence, preserve voice, avoid generic advice
+### recommender.py
+- Intelligence-first prompt: model must evaluate every intelligence item with APPLIES/NOT_APPLICABLE/RESPECTED verdict
+- Output JSON includes `intelligence_applied` array + `intelligence_source` per action plan item
+- max_tokens=4000, temperature=0.3
+- Falls back to hardcoded AEO_GUIDE if Notion-synced file missing
 
-### app.py (MODIFIED)
-- Imports `get_feed_metadata` for UI indicator
-- Header shows intelligence feed version and date
-- Version bumped to v0.7
-- "Perplexity" removed from UI copy → "AI search engines"
-- Help text added for intent validation
+### app.py
+- Intelligence Analysis panel: shows applied items (red), respected counter-signals (green), N/A items (collapsed)
+- Action plan items display `intelligence_source` field
+- Header shows feed version + weeks of data
+- v0.8, "AI search engines" copy, intent help text
 
 ## Configuration
 `.streamlit/secrets.toml`:
@@ -105,21 +115,19 @@ Commit and push to main branch. Pushes to main auto-deploy to Streamlit Cloud.
 - `recommendations` - Recommendation dict
 
 ## Rolling Handover
-**Last session:** 14 Feb 2026 (pal-ops chat — Search Intelligence Suite master dev)
+**Last session:** 15 Feb 2026 (pal-ops chat — Search Intelligence Suite master dev)
 
-### Deployed to main (2 commits)
-1. **v0.7 Intelligence-fed recommendations** (commit 98cb774)
-   - `intelligence_feed.py` + `intelligence/current_feed.json` (30 weeks curated insights)
-   - `recommender.py` injects intelligence context + voice preservation instructions
-   - `app.py` v0.7 UI, "AI search engines" copy, intent help text
-2. **Dynamic AEO Guide from Notion** (commit b36d1aa)
-   - `intelligence/aeo_guide.md` — full AEO Guide (~4000 words, synced from Notion)
-   - `sync_aeo_guide.py` — fetches from Notion API, writes local file
-   - `recommender.py` loads guide from file, falls back to hardcoded `AEO_GUIDE`
-   - `intelligence_feed.py` added `get_aeo_guide()` loader
+### Deployed to main
+1. **v0.7 Intelligence-fed recommendations** (commit 98cb774) — 14 Feb
+2. **Dynamic AEO Guide from Notion** (commit b36d1aa) — 14 Feb
+3. **v0.8 Intelligence-first architecture** (commit 499baee) — 15 Feb
+   - `intelligence_feed.py` added `get_checklist_prompt()` — 13 items as evaluatable checklist
+   - `recommender.py` restructured: intelligence-first prompt, `intelligence_applied` array, `intelligence_source` per action
+   - `app.py` Intelligence Analysis panel, version v0.8
 
 ### Backlogged
 - **Suite-level escalation signal**: When 0% citation rate, flag domain-level problem. Requires suite data. Noted in AEO Roadmap on Notion.
+- **Show cited competitor URLs** (was v0.8 scope, deferred)
 
 ### Sequencing plan (posted to Unified Dev Comms)
 - AEO to v1.0 (Supabase) → GEO to v3.0 (dynamic keywords) → Suite MVP (shared auth + handoff)
@@ -130,6 +138,6 @@ Commit and push to main branch. Pushes to main auto-deploy to Streamlit Cloud.
 3. Commit + push to main
 
 ### Next
-- Test v0.7 live, compare recommendations vs v0.6
-- Have Morten test on Fyresign page
-- v0.8: Show cited competitor URLs
+- Have Morten test v0.8 on Fyresign page
+- v0.9: Show cited competitor URLs
+- v1.0: Supabase persistence
