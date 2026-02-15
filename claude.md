@@ -4,7 +4,22 @@
 A Streamlit-based tool that analyzes web pages for **Answer Engine Optimization (AEO)** - helping content rank better in AI search engines like ChatGPT, Perplexity, and Google AI Overviews.
 
 ## Current Version
-v0.8 - Intelligence-First Recommendations
+v0.9 - Competitor URL Display ✅ DEPLOYED
+
+## Ongoing Instructions
+- **Output style**: Start each output declaring what you're working on, e.g. "I'm [something] chat"
+- **State transfer**: Keep this local claude.md updated as the primary state transfer file. Also update global CLAUDE.md for cross-chat awareness.
+- **Notion master index**: Update the AEO entry (PRCS008) in [Pal's Software & Tools Index](https://www.notion.so/All-of-Pals-Software-App-Tools-Automations-and-Functions-Across-All-Tools-3079fa1ce4f580e28a9fcf10743b2584) when significant features ship.
+- **Product spec**: No separate product spec file — all product details live in this claude.md.
+
+## What Changed in v0.9
+- **Competitor URL display**: New "Competitor Analysis" UI section between Citation Results and Recommendations
+- **`build_competitor_profile()` helper**: Groups cited URLs by domain (using `urlparse`), filters out user's own domain, returns sorted by frequency
+- **Domain-grouped UI**: Shows each competing domain, how many queries it appeared in, expandable list of specific URLs
+- **Recommender enhanced**: Top-5 competitor domains injected into GPT prompt as "Top Competing Sources" section — enables differentiation strategy recommendations
+- **PDF report updated**: "Top Competing Domains" section added after citation rate summary
+- **`citation_dicts` enriched**: Both recommender and PDF paths now include `sources_found` per citation result
+- **Version bump**: v0.8 → v0.9 in header (2 places) and footer
 
 ## What Changed in v0.8
 - **Intelligence-first architecture**: Intelligence items are now an explicit evaluation checklist — the model MUST evaluate every item against the page and return a verdict (APPLIES/NOT_APPLICABLE/RESPECTED)
@@ -26,13 +41,13 @@ v0.8 - Intelligence-First Recommendations
 ```
 ├── app.py                 # Streamlit UI and main application flow
 ├── analyzer.py            # Content extraction & analysis (BeautifulSoup)
-├── intelligence_feed.py   # NEW: Loads curated intelligence from JSON feed
+├── intelligence_feed.py   # Loads curated intelligence from JSON feed
 ├── intelligence/
-│   └── current_feed.json  # NEW: Curated intelligence data (updated weekly)
+│   └── current_feed.json  # Curated intelligence data (updated weekly)
 ├── intent_extractor.py    # User intent extraction using GPT-4o-mini
 ├── query_generator.py     # LLM-based query generation (1-3 per intent)
-├── perplexity_checker.py  # Citation checking via Perplexity API
-├── recommender.py         # AI-powered recommendations (now intelligence-fed)
+├── perplexity_checker.py  # Citation checking via Perplexia API
+├── recommender.py         # AI-powered recommendations (intelligence-fed)
 └── requirements.txt       # Dependencies
 ```
 
@@ -45,7 +60,7 @@ The intelligence feed (`intelligence/current_feed.json`) contains:
 
 To update: Edit `intelligence/current_feed.json` with new insights after each newsletter analysis. The feed version and date display in the UI header.
 
-## UX Flow (v0.7)
+## UX Flow (v0.9)
 
 1. **URL Input** → User enters URL and clicks "Analyze"
 2. **Analysis Results** → Shows: Page info, first paragraph, content preview
@@ -55,9 +70,10 @@ To update: Edit `intelligence/current_feed.json` with new insights after each ne
    - "Confirm Intents" button to proceed
 4. **Intent Relevance Score** → 0-100 with breakdown (Content /60, Position /20, Structure /20)
 5. **Query Review** → User can deselect irrelevant queries before citation check
-6. **Citation Check** → Queries checked against AI search engines (Perplexity API)
-7. **Intelligence Analysis** → Panel showing which intelligence items apply, counter-signals respected, N/A items
-8. **Recommendations** → Intelligence-driven recommendations with explicit intelligence sources per action
+6. **Citation Check** → Queries checked against AI search engines (Perplexia API)
+7. **Competitor Analysis** → Domain-grouped view of what's being cited instead (top 10 domains, expandable URLs per domain)
+8. **Intelligence Analysis** → Panel showing which intelligence items apply, counter-signals respected, N/A items
+9. **Recommendations** → Intelligence-driven recommendations with competitor context and explicit intelligence sources per action
 
 ## Key Modules
 
@@ -71,14 +87,17 @@ To update: Edit `intelligence/current_feed.json` with new insights after each ne
 ### recommender.py
 - Intelligence-first prompt: model must evaluate every intelligence item with APPLIES/NOT_APPLICABLE/RESPECTED verdict
 - Output JSON includes `intelligence_applied` array + `intelligence_source` per action plan item
+- **v0.9**: Top-5 competitor domains injected into prompt as "Top Competing Sources" section
 - max_tokens=4000, temperature=0.3
 - Falls back to hardcoded AEO_GUIDE if Notion-synced file missing
 
 ### app.py
+- **v0.9**: `build_competitor_profile()` helper — groups sources by domain, excludes user's own domain
+- **v0.9**: Competitor Analysis UI section with domain-grouped expandable view
 - Intelligence Analysis panel: shows applied items (red), respected counter-signals (green), N/A items (collapsed)
 - Action plan items display `intelligence_source` field
 - Header shows feed version + weeks of data
-- v0.8, "AI search engines" copy, intent help text
+- v0.9, "AI search engines" copy, intent help text
 
 ## Configuration
 `.streamlit/secrets.toml`:
@@ -91,6 +110,7 @@ PERPLEXITY_API_KEY = "pplx-..."  # For citation checking
 Commit and push to main branch. Pushes to main auto-deploy to Streamlit Cloud.
 
 ## Safety
+- `v0.8-stable` tag on commit `69def97` (before v0.9 competitor URL changes)
 - `v0.6-stable` tag on the commit before intelligence feed changes
 - Intelligence feed is additive — removing the JSON file reverts to v0.6 behaviour
 
@@ -115,7 +135,7 @@ Commit and push to main branch. Pushes to main auto-deploy to Streamlit Cloud.
 - `recommendations` - Recommendation dict
 
 ## Rolling Handover
-**Last session:** 15 Feb 2026 (pal-ops chat — Search Intelligence Suite master dev)
+**Last session:** 15 Feb 2026
 
 ### Deployed to main
 1. **v0.7 Intelligence-fed recommendations** (commit 98cb774) — 14 Feb
@@ -129,20 +149,27 @@ Commit and push to main branch. Pushes to main auto-deploy to Streamlit Cloud.
    - Added intelligence sections to PDF (verdicts, sources)
    - Hardened `sanitize_for_pdf` for GPT output (arrows, emoji, checkmarks)
    - Wrapped in try/except — degrades gracefully if exotic chars slip through
+5. **v0.9 Competitor URL display** (commit 7515644) — 15 Feb
+   - `build_competitor_profile()` helper in `app.py` — groups sources by domain via `urlparse`
+   - Competitor Analysis UI section between citation results and recommendations
+   - Top-5 competitor domains injected into GPT prompt for differentiation strategies
+   - PDF report includes "Top Competing Domains" section
+   - `citation_dicts` enriched with `sources_found` in both recommender and PDF paths
+
+### Validation Complete ✅
+- **Morten feedback (v0.8):** Brilliant. Used on 20+ pages for Fyresign client work. Tool is production-ready for client-facing reports.
+- **v0.9 needs testing:** Have Morten test competitor analysis on a page with <100% citation rate.
 
 ### Backlogged
 - **Suite-level escalation signal**: When 0% citation rate, flag domain-level problem. Requires suite data. Noted in AEO Roadmap on Notion.
-- **Show cited competitor URLs** (was v0.8 scope, deferred)
 
-### Sequencing plan (posted to Unified Dev Comms)
+### Sequencing Plan (Posted to Unified Dev Comms)
 - AEO to v1.0 (Supabase) → GEO to v3.0 (dynamic keywords) → Suite MVP (shared auth + handoff)
 
-### To update AEO Guide
+### To Update AEO Guide
 1. Edit Notion page: https://www.notion.so/2f49fa1ce4f5805dac3edce68f48be61
 2. Run `python sync_aeo_guide.py` (needs NOTION_API_KEY in env or .streamlit/secrets.toml)
 3. Commit + push to main
 
-### Next
-- Have Morten test v0.8 on Fyresign page
-- v0.9: Show cited competitor URLs
-- v1.0: Supabase persistence
+### Next Priority
+**v1.0:** Supabase persistence (suite integration - enables historical tracking, user workspaces)
