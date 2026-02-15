@@ -129,6 +129,27 @@ def sanitize_for_pdf(text):
     return text.encode('latin-1', errors='replace').decode('latin-1')
 
 
+def break_long_words(text, max_chars=80):
+    """Insert zero-width spaces or hyphens into very long unbreakable words (like URLs)."""
+    if not text:
+        return ""
+    words = text.split(' ')
+    result = []
+    for word in words:
+        if len(word) > max_chars:
+            # Break long words (typically URLs) with spaces every max_chars
+            chunks = [word[i:i+max_chars] for i in range(0, len(word), max_chars)]
+            result.append(' '.join(chunks))
+        else:
+            result.append(word)
+    return ' '.join(result)
+
+
+def safe_multi_cell(pdf, w, h, text):
+    """Write text via multi_cell with long-word breaking to prevent fpdf overflow."""
+    pdf.multi_cell(w, h, break_long_words(sanitize_for_pdf(text)))
+
+
 def generate_pdf_report(url, title, recommendations, citation_results=None):
     """Generate a PDF report of the AEO audit."""
     pdf = FPDF()
@@ -178,7 +199,8 @@ def generate_pdf_report(url, title, recommendations, citation_results=None):
             pdf.cell(0, 8, 'Top Competing Domains', ln=True)
             pdf.set_font('Helvetica', '', 10)
             for domain, count in top_domains:
-                pdf.cell(0, 5, sanitize_for_pdf(f'- {domain} (cited {count} time{"s" if count != 1 else ""})'), ln=True)
+                domain_display = domain[:60] if len(domain) > 60 else domain
+                safe_multi_cell(pdf, 0, 5, f'- {domain_display} (cited {count} time{"s" if count != 1 else ""})')
             pdf.ln(5)
 
     # Summary
@@ -186,7 +208,7 @@ def generate_pdf_report(url, title, recommendations, citation_results=None):
         pdf.set_font('Helvetica', 'B', 14)
         pdf.cell(0, 10, 'Summary', ln=True)
         pdf.set_font('Helvetica', '', 11)
-        pdf.multi_cell(0, 6, sanitize_for_pdf(recommendations['summary']))
+        safe_multi_cell(pdf, 0, 6, recommendations['summary'])
         pdf.ln(5)
 
     # Intelligence Analysis
@@ -209,19 +231,19 @@ def generate_pdf_report(url, title, recommendations, citation_results=None):
             if verdict == 'APPLIES':
                 pdf.set_font('Helvetica', 'B', 10)
                 pdf.set_text_color(200, 50, 50)
-                pdf.multi_cell(0, 5, f'APPLIES [{item_type}]: {item_name}')
+                safe_multi_cell(pdf, 0, 5, f'APPLIES [{item_type}]: {item_name}')
             elif verdict == 'RESPECTED':
                 pdf.set_font('Helvetica', 'B', 10)
                 pdf.set_text_color(50, 150, 50)
-                pdf.multi_cell(0, 5, f'RESPECTED [COUNTER-SIGNAL]: {item_name}')
+                safe_multi_cell(pdf, 0, 5, f'RESPECTED [COUNTER-SIGNAL]: {item_name}')
             else:
                 pdf.set_font('Helvetica', '', 10)
                 pdf.set_text_color(150, 150, 150)
-                pdf.multi_cell(0, 5, f'N/A [{item_type}]: {item_name}')
+                safe_multi_cell(pdf, 0, 5, f'N/A [{item_type}]: {item_name}')
 
             pdf.set_text_color(0, 0, 0)
             pdf.set_font('Helvetica', '', 9)
-            pdf.multi_cell(0, 4, f'  {impact}')
+            safe_multi_cell(pdf, 0, 4, f'  {impact}')
             pdf.ln(2)
 
         pdf.ln(3)
@@ -232,7 +254,7 @@ def generate_pdf_report(url, title, recommendations, citation_results=None):
         pdf.cell(0, 10, 'Critical Issues', ln=True)
         pdf.set_font('Helvetica', '', 11)
         for issue in recommendations['critical_issues']:
-            pdf.multi_cell(0, 6, f'* {sanitize_for_pdf(issue)}')
+            safe_multi_cell(pdf, 0, 6, f'* {issue}')
         pdf.ln(5)
 
     # Action Plan
@@ -242,23 +264,23 @@ def generate_pdf_report(url, title, recommendations, citation_results=None):
 
         for item in recommendations['action_plan']:
             pdf.set_font('Helvetica', 'B', 12)
-            pdf.multi_cell(0, 6, f"Priority {item.get('priority', '?')}: {sanitize_for_pdf(item.get('action', ''))}")
+            safe_multi_cell(pdf, 0, 6, f"Priority {item.get('priority', '?')}: {item.get('action', '')}")
 
             if item.get('intelligence_source'):
                 pdf.set_font('Helvetica', '', 9)
                 pdf.set_text_color(100, 100, 100)
-                pdf.multi_cell(0, 4, f"Intelligence source: {sanitize_for_pdf(item['intelligence_source'])}")
+                safe_multi_cell(pdf, 0, 4, f"Intelligence source: {item['intelligence_source']}")
                 pdf.set_text_color(0, 0, 0)
 
             pdf.set_font('Helvetica', 'I', 10)
-            pdf.multi_cell(0, 5, f"Why: {sanitize_for_pdf(item.get('reason', ''))}")
+            safe_multi_cell(pdf, 0, 5, f"Why: {item.get('reason', '')}")
 
             if item.get('current_text'):
                 pdf.set_font('Helvetica', 'B', 10)
                 pdf.cell(0, 6, 'Current:', ln=True)
                 pdf.set_font('Helvetica', '', 10)
                 pdf.set_text_color(150, 50, 50)
-                pdf.multi_cell(0, 5, sanitize_for_pdf(item.get('current_text', '')))
+                safe_multi_cell(pdf, 0, 5, item.get('current_text', ''))
                 pdf.set_text_color(0, 0, 0)
 
             if item.get('suggested_text'):
@@ -266,7 +288,7 @@ def generate_pdf_report(url, title, recommendations, citation_results=None):
                 pdf.cell(0, 6, 'Suggested:', ln=True)
                 pdf.set_font('Helvetica', '', 10)
                 pdf.set_text_color(50, 150, 50)
-                pdf.multi_cell(0, 5, sanitize_for_pdf(item.get('suggested_text', '')))
+                safe_multi_cell(pdf, 0, 5, item.get('suggested_text', ''))
                 pdf.set_text_color(0, 0, 0)
 
             pdf.ln(5)
@@ -277,7 +299,7 @@ def generate_pdf_report(url, title, recommendations, citation_results=None):
         pdf.cell(0, 10, 'Quick Wins', ln=True)
         pdf.set_font('Helvetica', '', 11)
         for win in recommendations['quick_wins']:
-            pdf.multi_cell(0, 6, f'* {sanitize_for_pdf(win)}')
+            safe_multi_cell(pdf, 0, 6, f'* {win}')
 
     return pdf.output()
 
