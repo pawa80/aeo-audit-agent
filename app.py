@@ -8,6 +8,7 @@ import streamlit as st
 from fpdf import FPDF
 import base64
 from datetime import datetime
+from urllib.parse import urlparse
 from analyzer import analyze_url, AnalysisResult
 from perplexity_checker import check_all_queries, get_citation_summary, CitationResult
 from recommender import generate_recommendations
@@ -15,6 +16,44 @@ from intent_extractor import extract_intents
 from query_generator import generate_queries_from_intents
 from intent_scorer import calculate_intent_score
 from intelligence_feed import get_feed_metadata
+
+
+def build_competitor_profile(citation_results, target_url):
+    """Group cited URLs by domain, excluding the user's own domain.
+
+    Returns sorted list: [{domain, count, urls, queries}]
+    where count = number of queries the domain appeared in.
+    """
+    target_domain = urlparse(target_url).netloc.lower().replace('www.', '')
+    domain_data = {}
+
+    for result in citation_results:
+        if not result.sources_found:
+            continue
+        for source_url in result.sources_found:
+            try:
+                parsed = urlparse(source_url)
+                domain = parsed.netloc.lower().replace('www.', '')
+            except Exception:
+                continue
+            if not domain or domain == target_domain:
+                continue
+            if domain not in domain_data:
+                domain_data[domain] = {'domain': domain, 'urls': set(), 'queries': set()}
+            domain_data[domain]['urls'].add(source_url)
+            domain_data[domain]['queries'].add(result.query)
+
+    profile = []
+    for d in domain_data.values():
+        profile.append({
+            'domain': d['domain'],
+            'count': len(d['queries']),
+            'urls': sorted(d['urls']),
+            'queries': sorted(d['queries']),
+        })
+
+    profile.sort(key=lambda x: x['count'], reverse=True)
+    return profile
 
 
 def generate_claude_prompt(url, title, recommendations):
@@ -121,6 +160,26 @@ def generate_pdf_report(url, title, recommendations, citation_results=None):
         total = len(citation_results)
         pdf.cell(0, 6, f'Citation Rate: {cited}/{total} queries ({int(cited/total*100) if total > 0 else 0}%)', ln=True)
         pdf.ln(5)
+
+        # Top Competing Domains
+        # Build competitor profile from citation_results dicts
+        domain_counts = {}
+        for r in citation_results:
+            for source_url in r.get('sources_found', []):
+                try:
+                    domain = urlparse(source_url).netloc.lower().replace('www.', '')
+                except Exception:
+                    continue
+                if domain:
+                    domain_counts[domain] = domain_counts.get(domain, 0) + 1
+        if domain_counts:
+            top_domains = sorted(domain_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+            pdf.set_font('Helvetica', 'B', 12)
+            pdf.cell(0, 8, 'Top Competing Domains', ln=True)
+            pdf.set_font('Helvetica', '', 10)
+            for domain, count in top_domains:
+                pdf.cell(0, 5, sanitize_for_pdf(f'- {domain} (cited {count} time{"s" if count != 1 else ""})'), ln=True)
+            pdf.ln(5)
 
     # Summary
     if recommendations.get('summary'):
@@ -550,9 +609,9 @@ def main():
     # Intelligence feed indicator
     feed_meta = get_feed_metadata()
     if feed_meta:
-        st.caption(f"v0.8 | Intelligence-First AEO | Feed: {feed_meta.get('version', 'N/A')} ({feed_meta.get('last_updated', 'N/A')}) — {feed_meta.get('weeks_of_data', 0)} weeks of data")
+        st.caption(f"v0.9 | Intelligence-First AEO | Feed: {feed_meta.get('version', 'N/A')} ({feed_meta.get('last_updated', 'N/A')}) — {feed_meta.get('weeks_of_data', 0)} weeks of data")
     else:
-        st.caption("v0.8 | Answer Engine Optimization")
+        st.caption("v0.9 | Answer Engine Optimization")
 
     st.markdown("""
     Analyze web pages to see how well they're optimized for AI answer engines
@@ -860,6 +919,23 @@ def main():
                     summary = get_citation_summary(st.session_state.citation_results)
                     display_citation_results(st.session_state.citation_results, summary)
 
+                    # Competitor Analysis Section
+                    competitor_profile = build_competitor_profile(
+                        st.session_state.citation_results,
+                        result.url
+                    )
+                    if competitor_profile:
+                        st.markdown("---")
+                        st.subheader("Competitor Analysis")
+                        st.markdown(f"**{len(competitor_profile)} domains** are being cited instead of your page.")
+
+                        for comp in competitor_profile[:10]:
+                            with st.expander(f"{comp['domain']} — cited in {comp['count']}/{summary['total_queries']} queries"):
+                                st.markdown(f"**Queries where this domain was cited:** {', '.join(comp['queries'])}")
+                                st.markdown("**URLs cited:**")
+                                for u in comp['urls'][:10]:
+                                    st.markdown(f"- {u}")
+
                     # Recommendations Section (only after citation check)
                     st.markdown("---")
                     st.subheader("Recommendations")
@@ -894,7 +970,7 @@ def main():
                             openai_key = st.secrets["OPENAI_API_KEY"]
                             # Convert CitationResult objects to dicts for recommender
                             citation_dicts = [
-                                {'query': r.query, 'cited': r.cited}
+                                {'query': r.query, 'cited': r.cited, 'sources_found': r.sources_found}
                                 for r in st.session_state.citation_results
                             ] if st.session_state.citation_results else []
 
@@ -1018,7 +1094,7 @@ def main():
                             citation_dicts = None
                             if st.session_state.get('citation_results'):
                                 citation_dicts = [
-                                    {'query': r.query, 'cited': r.cited}
+                                    {'query': r.query, 'cited': r.cited, 'sources_found': r.sources_found}
                                     for r in st.session_state.citation_results
                                 ]
 
@@ -1048,7 +1124,7 @@ def main():
     st.markdown("---")
     st.markdown(
         "<div style='text-align: center; color: #666666; font-size: 12px; padding: 16px 0;'>"
-        "AEO Audit Agent v0.8 | Intelligence-First Answer Engine Optimization"
+        "AEO Audit Agent v0.9 | Intelligence-First Answer Engine Optimization"
         "</div>",
         unsafe_allow_html=True
     )

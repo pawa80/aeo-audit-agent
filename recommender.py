@@ -123,10 +123,33 @@ def generate_recommendations(title, full_content, first_paragraph, direct_answer
 
     client = OpenAI(api_key=api_key)
 
+    from urllib.parse import urlparse
+
     # Format citation results for prompt
     cited_queries = [r['query'] for r in citation_results if r.get('cited')]
     uncited_queries = [r['query'] for r in citation_results if not r.get('cited')]
     citation_rate = len(cited_queries) / len(citation_results) * 100 if citation_results else 0
+
+    # Build top-5 competitor domains from sources_found
+    domain_query_counts = {}
+    for r in citation_results:
+        for source_url in r.get('sources_found', []):
+            try:
+                domain = urlparse(source_url).netloc.lower().replace('www.', '')
+            except Exception:
+                continue
+            if domain:
+                if domain not in domain_query_counts:
+                    domain_query_counts[domain] = set()
+                domain_query_counts[domain].add(r['query'])
+    top_competitors = sorted(domain_query_counts.items(), key=lambda x: len(x[1]), reverse=True)[:5]
+    total_queries = len(citation_results)
+    competitor_lines = []
+    for domain, queries in top_competitors:
+        competitor_lines.append(f"- {domain} (cited in {len(queries)}/{total_queries} queries)")
+    competitor_section = ""
+    if competitor_lines:
+        competitor_section = "\n**Top Competing Sources (by domain):**\n" + "\n".join(competitor_lines)
 
     # Truncate full_content to prevent token overflow (keep first 8000 chars)
     content_for_analysis = full_content[:8000] if full_content else ""
@@ -186,6 +209,7 @@ Your recommendations MUST be driven by specific intelligence items, not generic 
 - Citation Rate: {citation_rate:.0f}%
 - Cited Queries: {', '.join(cited_queries) if cited_queries else 'None'}
 - Uncited Queries: {', '.join(uncited_queries) if uncited_queries else 'None'}
+{competitor_section}
 
 **Full Page Content:**
 {content_for_analysis}
