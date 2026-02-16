@@ -4,13 +4,19 @@
 A Streamlit-based tool that analyzes web pages for **Answer Engine Optimization (AEO)** - helping content rank better in AI search engines like ChatGPT, Perplexity, and Google AI Overviews.
 
 ## Current Version
-v0.9 - Competitor URL Display ✅ DEPLOYED
+v0.9.1 - Competitor CSV Export ✅ DEPLOYED
 
 ## Ongoing Instructions
 - **Output style**: Start each output declaring what you're working on, e.g. "I'm [something] chat"
 - **State transfer**: Keep this local claude.md updated as the primary state transfer file. Also update global CLAUDE.md for cross-chat awareness.
 - **Notion master index**: Update the AEO entry (PRCS008) in [Pal's Software & Tools Index](https://www.notion.so/All-of-Pals-Software-App-Tools-Automations-and-Functions-Across-All-Tools-3079fa1ce4f580e28a9fcf10743b2584) when significant features ship.
 - **Product spec**: No separate product spec file — all product details live in this claude.md.
+
+## What Changed in v0.9.1
+- **CSV export for competitor analysis**: "Download Competitor Report (CSV)" button in Competitor Analysis section
+- **`extract_base_domain()` helper**: Collapses subdomains (blog.example.com -> example.com) for cleaner grouping
+- **`create_competitor_csv()` function**: Aggregates non-cited query sources by base domain, top 50, semicolon-separated for Excel
+- **PDF fix**: `break_long_words()` + `safe_multi_cell()` prevent fpdf overflow on long URLs
 
 ## What Changed in v0.9
 - **Competitor URL display**: New "Competitor Analysis" UI section between Citation Results and Recommendations
@@ -155,6 +161,12 @@ Commit and push to main branch. Pushes to main auto-deploy to Streamlit Cloud.
    - Top-5 competitor domains injected into GPT prompt for differentiation strategies
    - PDF report includes "Top Competing Domains" section
    - `citation_dicts` enriched with `sources_found` in both recommender and PDF paths
+6. **PDF fix — long word overflow** (commit 49e4a99) — 15 Feb
+   - `break_long_words()` + `safe_multi_cell()` helpers prevent fpdf "not enough horizontal space" error
+7. **v0.9.1 CSV export** (commit TBD) — 16 Feb
+   - "Download Competitor Report (CSV)" button in Competitor Analysis section
+   - `extract_base_domain()` collapses subdomains for cleaner grouping
+   - `create_competitor_csv()` — top 50 domains, semicolon-separated for Excel compatibility
 
 ### Validation Complete ✅
 - **Morten feedback (v0.8):** Brilliant. Used on 20+ pages for Fyresign client work. Tool is production-ready for client-facing reports.

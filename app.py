@@ -4,6 +4,9 @@ AEO Audit Agent - Streamlit Application
 A tool to analyze web pages for Answer Engine Optimization.
 """
 
+import csv
+from io import StringIO
+
 import streamlit as st
 from fpdf import FPDF
 import base64
@@ -54,6 +57,60 @@ def build_competitor_profile(citation_results, target_url):
 
     profile.sort(key=lambda x: x['count'], reverse=True)
     return profile
+
+
+def extract_base_domain(url):
+    """Extract clean base domain from URL (e.g. https://blog.example.com/post -> example.com)."""
+    try:
+        parsed = urlparse(url)
+        domain = parsed.netloc.lower()
+        if domain.startswith('www.'):
+            domain = domain[4:]
+        parts = domain.split('.')
+        if len(parts) > 2:
+            domain = '.'.join(parts[-2:])
+        return domain
+    except Exception:
+        return url
+
+
+def create_competitor_csv(citation_results, analyzed_url):
+    """Generate CSV from competitor citation data, grouped by base domain."""
+    non_cited = [r for r in citation_results if not r.cited and r.sources_found]
+    if not non_cited:
+        return ""
+
+    domain_data = {}
+    for result in non_cited:
+        for source_url in result.sources_found:
+            domain = extract_base_domain(source_url)
+            if domain not in domain_data:
+                domain_data[domain] = {'queries': set(), 'urls': set()}
+            domain_data[domain]['queries'].add(result.query)
+            domain_data[domain]['urls'].add(source_url)
+
+    domain_list = []
+    for domain, data in domain_data.items():
+        domain_list.append({
+            'domain': domain,
+            'citation_count': len(data['queries']),
+            'queries': sorted(data['queries']),
+            'urls': sorted(data['urls']),
+        })
+    domain_list.sort(key=lambda x: x['citation_count'], reverse=True)
+    top_domains = domain_list[:50]
+
+    output = StringIO()
+    writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
+    writer.writerow(['Domain', 'Citation Count', 'Queries Where Cited', 'URLs Cited'])
+    for item in top_domains:
+        queries_str = ';'.join(q.replace(';', ',') for q in item['queries'])
+        urls_str = ';'.join(item['urls'])
+        writer.writerow([item['domain'], item['citation_count'], queries_str, urls_str])
+    if len(domain_list) > 50:
+        writer.writerow([])
+        writer.writerow([f"Note: Showing top 50 of {len(domain_list)} total competitors"])
+    return output.getvalue()
 
 
 def generate_claude_prompt(url, title, recommendations):
@@ -631,9 +688,9 @@ def main():
     # Intelligence feed indicator
     feed_meta = get_feed_metadata()
     if feed_meta:
-        st.caption(f"v0.9 | Intelligence-First AEO | Feed: {feed_meta.get('version', 'N/A')} ({feed_meta.get('last_updated', 'N/A')}) — {feed_meta.get('weeks_of_data', 0)} weeks of data")
+        st.caption(f"v0.9.1 | Intelligence-First AEO | Feed: {feed_meta.get('version', 'N/A')} ({feed_meta.get('last_updated', 'N/A')}) — {feed_meta.get('weeks_of_data', 0)} weeks of data")
     else:
-        st.caption("v0.9 | Answer Engine Optimization")
+        st.caption("v0.9.1 | Answer Engine Optimization")
 
     st.markdown("""
     Analyze web pages to see how well they're optimized for AI answer engines
@@ -958,6 +1015,27 @@ def main():
                                 for u in comp['urls'][:10]:
                                     st.markdown(f"- {u}")
 
+                        # CSV export button
+                        csv_data = create_competitor_csv(st.session_state.citation_results, result.url)
+                        if csv_data:
+                            analyzed_domain = extract_base_domain(result.url)
+                            today = datetime.now().strftime('%Y-%m-%d')
+                            st.download_button(
+                                label="Download Competitor Report (CSV)",
+                                data=csv_data,
+                                file_name=f"competitor_analysis_{analyzed_domain}_{today}.csv",
+                                mime="text/csv",
+                                help="Export competitor analysis for use in Excel/Google Sheets"
+                            )
+                            total_domains = len(set(
+                                extract_base_domain(u)
+                                for r in st.session_state.citation_results
+                                if not r.cited
+                                for u in r.sources_found
+                            ))
+                            if total_domains > 50:
+                                st.caption(f"Export limited to top 50 of {total_domains} competitors")
+
                     # Recommendations Section (only after citation check)
                     st.markdown("---")
                     st.subheader("Recommendations")
@@ -1146,7 +1224,7 @@ def main():
     st.markdown("---")
     st.markdown(
         "<div style='text-align: center; color: #666666; font-size: 12px; padding: 16px 0;'>"
-        "AEO Audit Agent v0.9 | Intelligence-First Answer Engine Optimization"
+        "AEO Audit Agent v0.9.1 | Intelligence-First Answer Engine Optimization"
         "</div>",
         unsafe_allow_html=True
     )
