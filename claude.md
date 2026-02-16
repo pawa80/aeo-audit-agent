@@ -98,12 +98,14 @@ To update: Edit `intelligence/current_feed.json` with new insights after each ne
 - Falls back to hardcoded AEO_GUIDE if Notion-synced file missing
 
 ### app.py
+- **v0.9.1**: `extract_base_domain()` + `create_competitor_csv()` — CSV export for competitor data
+- **v0.9.1**: `break_long_words()` + `safe_multi_cell()` — PDF hardening for long URLs
 - **v0.9**: `build_competitor_profile()` helper — groups sources by domain, excludes user's own domain
-- **v0.9**: Competitor Analysis UI section with domain-grouped expandable view
+- **v0.9**: Competitor Analysis UI section with domain-grouped expandable view + CSV download button
 - Intelligence Analysis panel: shows applied items (red), respected counter-signals (green), N/A items (collapsed)
 - Action plan items display `intelligence_source` field
 - Header shows feed version + weeks of data
-- v0.9, "AI search engines" copy, intent help text
+- v0.9.1, "AI search engines" copy, intent help text
 
 ## Configuration
 `.streamlit/secrets.toml`:
@@ -141,7 +143,7 @@ Commit and push to main branch. Pushes to main auto-deploy to Streamlit Cloud.
 - `recommendations` - Recommendation dict
 
 ## Rolling Handover
-**Last session:** 15 Feb 2026
+**Last session:** 16 Feb 2026
 
 ### Deployed to main
 1. **v0.7 Intelligence-fed recommendations** (commit 98cb774) — 14 Feb
@@ -163,14 +165,23 @@ Commit and push to main branch. Pushes to main auto-deploy to Streamlit Cloud.
    - `citation_dicts` enriched with `sources_found` in both recommender and PDF paths
 6. **PDF fix — long word overflow** (commit 49e4a99) — 15 Feb
    - `break_long_words()` + `safe_multi_cell()` helpers prevent fpdf "not enough horizontal space" error
-7. **v0.9.1 CSV export** (commit TBD) — 16 Feb
+7. **v0.9.1 CSV export** (commit d3d9b14) — 16 Feb
    - "Download Competitor Report (CSV)" button in Competitor Analysis section
    - `extract_base_domain()` collapses subdomains for cleaner grouping
    - `create_competitor_csv()` — top 50 domains, semicolon-separated for Excel compatibility
 
-### Validation Complete ✅
-- **Morten feedback (v0.8):** Brilliant. Used on 20+ pages for Fyresign client work. Tool is production-ready for client-facing reports.
-- **v0.9 needs testing:** Have Morten test competitor analysis on a page with <100% citation rate.
+### This Session (16 Feb 2026)
+- Implemented v0.9 competitor URL display (plan from previous session)
+- Created safety tag `v0.8-stable` on `69def97` before deploying
+- Hit PDF generation bug — long unbreakable URLs caused fpdf "not enough horizontal space" error
+- Fixed with `break_long_words()` + `safe_multi_cell()` wrappers on all `multi_cell` calls
+- Implemented v0.9.1 CSV export per Pal's spec (extract_base_domain, create_competitor_csv)
+- Updated Notion PRCS008 entry (was outdated at v0.7, now shows v0.9)
+- **Not yet tested by Pal**: v0.9/v0.9.1 competitor features need testing on a page with <100% citation rate
+
+### Validation
+- **Morten feedback (v0.8):** Brilliant. Used on 20+ pages for Fyresign client work. Production-ready for client-facing reports.
+- **v0.9/v0.9.1 needs testing:** Competitor analysis + CSV export on a page with <100% citation rate
 
 ### Backlogged
 - **Suite-level escalation signal**: When 0% citation rate, flag domain-level problem. Requires suite data. Noted in AEO Roadmap on Notion.
